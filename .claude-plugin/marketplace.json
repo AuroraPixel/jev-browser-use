@@ -1,0 +1,17 @@
+{
+  "name": "jev-browser-use-marketplace",
+  "owner": {
+    "name": "AuroraPixel"
+  },
+  "plugins": [
+    {
+      "name": "jev-browser-use",
+      "source": "./",
+      "description": "Jev-powered browser automation for native Codex and Claude agents: fast local action loops, text handoffs, checkpoints, CLI, MCP and Chrome extension."
+    }
+  ],
+  "metadata": {
+    "description": "The jev-browser-use browser automation skill for Claude Code",
+    "version": "0.1.0"
+  }
+}

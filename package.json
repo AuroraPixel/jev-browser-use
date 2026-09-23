@@ -1,0 +1,73 @@
+{
+  "name": "jev-browser-use",
+  "version": "0.1.0",
+  "description": "Jev-powered browser automation for native Codex and Claude agents: fast local action loops, text handoffs, checkpoints, CLI, MCP and Chrome extension.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "jev-browser-use": "bin/jev-browser-use.cjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AuroraPixel/jev-browser-use.git"
+  },
+  "scripts": {
+    "build:daemon": "bun run scripts/build.ts daemon",
+    "build": "bun run scripts/build.ts all",
+    "dev": "bun run src/cli/main.ts",
+    "test": "bun test --timeout 120000",
+    "bench": "bun run bench/run.ts",
+    "typecheck": "bunx tsc --noEmit",
+    "help:gen": "bun run scripts/gen-help.ts",
+    "postinstall": "node scripts/postinstall.cjs",
+    "build:extension": "bun run --cwd extension build",
+    "test:extension": "bun run --cwd extension test:run",
+    "package:extension": "bun run scripts/package-extension.ts"
+  },
+  "devDependencies": {
+    "@puppeteer/browsers": "3.0.6",
+    "@types/bun": "1.3.14",
+    "@types/node": "24.3.0",
+    "acorn": "8.15.0",
+    "puppeteer-core": "25.8.0",
+    "typescript": "5.9.2",
+    "yauzl": "3.4.0"
+  },
+  "files": [
+    "bin/jev-browser-use.cjs",
+    "scripts/postinstall.cjs",
+    "scripts/download-binary.cjs",
+    "README.md",
+    "README.zh-CN.md",
+    "CONTRIBUTING.md",
+    "RELEASING.md",
+    "CHANGELOG.md",
+    ".env.example",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "docs/",
+    "skills/",
+    ".claude-plugin/",
+    ".codex-plugin/"
+  ],
+  "keywords": [
+    "browser",
+    "automation",
+    "puppeteer",
+    "cli",
+    "agent",
+    "claude-code",
+    "codex"
+  ],
+  "author": {
+    "name": "AuroraPixel",
+    "url": "https://github.com/AuroraPixel"
+  },
+  "homepage": "https://github.com/AuroraPixel/jev-browser-use#readme",
+  "bugs": {
+    "url": "https://github.com/AuroraPixel/jev-browser-use/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

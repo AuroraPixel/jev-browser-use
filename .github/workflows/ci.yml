@@ -1,0 +1,57 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun x tsc --noEmit
+      - name: Install Chrome for Testing
+        # The installer prints "chrome@<ver> <path>" as its last line (the macOS path
+        # contains spaces). Export the path as JEV_BROWSER_USE_CHROME so every test (CLI tests
+        # run with JEV_BROWSER_USE_HOME=<tmp>) and the bench use this pinned Chrome instead of
+        # whatever the runner image ships.
+        run: |
+          out=$(bun x @puppeteer/browsers install chrome@stable --path "$HOME/.jev-browser-use/v1/chrome")
+          echo "$out"
+          chrome=$(echo "$out" | tail -n 1 | sed 's/^[^ ]* //')
+          test -x "$chrome" || { echo "Chrome for Testing binary not found at '$chrome'"; exit 1; }
+          echo "JEV_BROWSER_USE_CHROME=$chrome" >> "$GITHUB_ENV"
+      - name: Check JEV_BROWSER_USE_CHROME
+        run: |
+          test -n "$JEV_BROWSER_USE_CHROME" && "$JEV_BROWSER_USE_CHROME" --version
+      - run: bun run build
+      - run: bun run test
+      - name: Install extension dependencies
+        run: bun install --frozen-lockfile
+        working-directory: extension
+      - name: Check and build extension
+        run: bun run typecheck && bun run test:run && bun run build
+        working-directory: extension
+      - name: Test real extension in an isolated Chrome profile
+        env:
+          JEV_BROWSER_USE_EXTENSION_DIR: ${{ github.workspace }}/extension/.output/chrome-mv3
+        run: bun run scripts/smoke-extension.ts
+      - name: Package check
+        run: npm pack --dry-run
+      - name: Benchmarks (Linux only; targets x2 for shared runners)
+        if: runner.os == 'Linux'
+        env:
+          JEV_BROWSER_USE_BENCH_SCALE: "2"
+        run: bun run bench/run.ts --check --bin dist/jev-browser-use

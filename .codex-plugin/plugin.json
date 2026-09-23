@@ -1,0 +1,36 @@
+{
+  "name": "jev-browser-use",
+  "version": "0.1.0",
+  "description": "Jev-powered browser automation for native Codex and Claude agents: fast local action loops, text handoffs, checkpoints, CLI, MCP and Chrome extension.",
+  "author": {
+    "name": "AuroraPixel",
+    "url": "https://github.com/AuroraPixel"
+  },
+  "homepage": "https://github.com/AuroraPixel/jev-browser-use#readme",
+  "repository": "https://github.com/AuroraPixel/jev-browser-use",
+  "license": "MIT",
+  "keywords": [
+    "browser",
+    "automation",
+    "puppeteer",
+    "cli",
+    "agent",
+    "claude-code",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "jev-browser-use",
+    "shortDescription": "Jev browsing with native agent reasoning",
+    "longDescription": "Jev-powered browser automation for native Codex and Claude agents: fast local action loops, text handoffs, checkpoints, CLI, MCP and Chrome extension.",
+    "developerName": "AuroraPixel",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Use jev-browser-use to browse and verify the result."
+    ]
+  }
+}

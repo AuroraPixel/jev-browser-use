@@ -1,0 +1,89 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Verify tag matches package.json version
+        # postinstall downloads from releases/download/v<package.json version>, so the release
+        # must use a tag of exactly v<version>
+        # (prereleases included: tag v1.2.0-rc.1 requires "version": "1.2.0-rc.1").
+        run: |
+          v="v$(node -p 'require("./package.json").version')"
+          if [ "$GITHUB_REF_NAME" != "$v" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version ($v)"
+            exit 1
+          fi
+          echo "tag $GITHUB_REF_NAME matches package.json"
+      - run: bun install --frozen-lockfile
+      - run: bun x tsc --noEmit
+      - name: Install extension dependencies
+        run: bun install --frozen-lockfile
+        working-directory: extension
+      - name: Check extension
+        run: bun run typecheck && bun run test:run
+        working-directory: extension
+      - name: Package extension
+        run: bun run package:extension
+      - name: Build all targets
+        run: |
+          bun run scripts/build.ts daemon
+          for t in bun-linux-x64 bun-linux-arm64 bun-darwin-arm64 bun-darwin-x64; do
+            name=$(echo $t | sed 's/^bun-//')
+            bun run scripts/build.ts all --target $t --outfile dist/jev-browser-use-$name
+          done
+          cd dist && sha256sum jev-browser-use-* > SHA256SUMS && cat SHA256SUMS
+      - name: Smoke test linux-x64 binary
+        run: |
+          chmod +x dist/jev-browser-use-linux-x64
+          out=$(dist/jev-browser-use-linux-x64 --version)
+          echo "$out"
+          v="$(node -p 'require("./package.json").version')"
+          case "$out" in *"$v"*) ;; *) echo "::error::--version output '$out' does not contain $v"; exit 1 ;; esac
+          dist/jev-browser-use-linux-x64 --help | head -n 1
+          (cd dist && sha256sum -c SHA256SUMS)
+      - name: Package check (shim, scripts, metadata and documentation)
+        run: |
+          pack_dir="$(mktemp -d)"
+          archive="$pack_dir/jev-browser-use-$(node -p 'require("./package.json").version').tgz"
+          npm pack --pack-destination "$pack_dir" >/dev/null
+          if [ ! -f "$archive" ]; then
+            echo "::error::npm pack did not create $archive"
+            exit 1
+          fi
+          tar -tzf "$archive" | sed 's#^package/##' | sort > "$pack_dir/files.txt"
+          cat "$pack_dir/files.txt"
+          for required in bin/jev-browser-use.cjs scripts/postinstall.cjs scripts/download-binary.cjs package.json; do
+            if ! grep -Fxq "$required" "$pack_dir/files.txt"; then
+              echo "::error::missing $required"
+              exit 1
+            fi
+          done
+          if grep -Eq '^(src/|bin/jev-browser-use-bin|dist/)' "$pack_dir/files.txt"; then
+            echo "::error::unexpected files in tarball"
+            exit 1
+          fi
+          node -e '
+            const pkg = require("./package.json");
+            if (pkg.name !== "jev-browser-use") { console.error("wrong package name " + pkg.name); process.exit(1); }
+            if (pkg.bin?.["jev-browser-use"] !== "bin/jev-browser-use.cjs") { console.error("wrong jev-browser-use bin mapping"); process.exit(1); }
+            if (pkg.dependencies && Object.keys(pkg.dependencies).length) { console.error("package must not have runtime dependencies"); process.exit(1); }
+          '
+      - name: GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist/jev-browser-use-*
+            dist/SHA256SUMS
