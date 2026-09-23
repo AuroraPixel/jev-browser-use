@@ -53,8 +53,9 @@ local checks first, then cross-compile from the clean release commit:
 
 ```bash
 bun run package:extension
-for target in bun-linux-x64 bun-linux-arm64 bun-darwin-arm64 bun-darwin-x64; do
-  bun run scripts/build.ts all --target "$target" --outfile "dist/jev-browser-use-${target#bun-}"
+for target in bun-linux-x64-baseline bun-linux-arm64 bun-darwin-arm64 bun-darwin-x64-baseline; do
+  asset="${target#bun-}"
+  bun run scripts/build.ts all --target "$target" --outfile "dist/jev-browser-use-${asset%-baseline}"
 done
 (cd dist && shasum -a 256 jev-browser-use-* > SHA256SUMS)
 # Write concrete validation results and any untested target limitations to release-notes.md outside the repo.
@@ -66,3 +67,5 @@ gh release create "v$(bun -p 'require("./package.json").version')" \
 Verify remote source, visibility, asset hashes and the downloaded native binary after publication. Cross-compiled targets
 that have not run natively must be identified in the release notes. Keep the hosted workflow enabled and rerun it after
 the account/runner issue is resolved; do not report an unstarted job as a passing platform test.
+
+The x64 assets use Bun baseline targets so the release does not require AVX/AVX2-capable CPUs.

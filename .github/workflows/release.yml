@@ -39,8 +39,8 @@ jobs:
       - name: Build all targets
         run: |
           bun run scripts/build.ts daemon
-          for t in bun-linux-x64 bun-linux-arm64 bun-darwin-arm64 bun-darwin-x64; do
-            name=$(echo $t | sed 's/^bun-//')
+          for t in bun-linux-x64-baseline bun-linux-arm64 bun-darwin-arm64 bun-darwin-x64-baseline; do
+            name=$(echo $t | sed 's/^bun-//; s/-baseline$//')
             bun run scripts/build.ts all --target $t --outfile dist/jev-browser-use-$name
           done
           cd dist && sha256sum jev-browser-use-* > SHA256SUMS && cat SHA256SUMS
