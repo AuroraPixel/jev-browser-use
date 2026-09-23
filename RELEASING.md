@@ -45,3 +45,24 @@ The package retains a Node-compatible shim and checksum download scripts for fut
 binary URL is this repository's GitHub release for `package.json.version`. A registry publication requires separate
 maintainer intent, package ownership and credentials/trusted-publisher configuration. Do not repoint the download base
 to upstream dev-browser or include private environment files, browser profiles or uncompiled dependencies in the package.
+
+## Manual release when hosted runners are unavailable
+
+If GitHub reports an account/runner problem before any job starts, distinguish that from a test failure. Complete the
+local checks first, then cross-compile from the clean release commit:
+
+```bash
+bun run package:extension
+for target in bun-linux-x64 bun-linux-arm64 bun-darwin-arm64 bun-darwin-x64; do
+  bun run scripts/build.ts all --target "$target" --outfile "dist/jev-browser-use-${target#bun-}"
+done
+(cd dist && shasum -a 256 jev-browser-use-* > SHA256SUMS)
+# Write concrete validation results and any untested target limitations to release-notes.md outside the repo.
+gh release create "v$(bun -p 'require("./package.json").version')" \
+  --target main --title "jev-browser-use $(bun -p 'require("./package.json").version')" \
+  --notes-file /absolute/path/to/release-notes.md dist/jev-browser-use-* dist/SHA256SUMS
+```
+
+Verify remote source, visibility, asset hashes and the downloaded native binary after publication. Cross-compiled targets
+that have not run natively must be identified in the release notes. Keep the hosted workflow enabled and rerun it after
+the account/runner issue is resolved; do not report an unstarted job as a passing platform test.
