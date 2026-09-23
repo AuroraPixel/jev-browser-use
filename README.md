@@ -204,13 +204,13 @@ Read the [complete handoff, checkpoint and submission contract](docs/jev.md).
 
 ```mermaid
 flowchart TD
-    Host[Native Codex / Claude\nPlan · read · write · verify] -->|bounded goal + known text + checkpoint| Runtime[Local warm daemon]
+    Host["Native Codex / Claude<br/>Plan · read · write · verify"] -->|bounded goal + known text + checkpoint| Runtime[Local warm daemon]
     Runtime --> Observe[Observe DOM + readiness]
     Observe --> Check{Checkpoint reached?}
     Check -->|yes| Host
-    Check -->|no| Jev[Jev / TypeSafe\nOne request: operation + target choices]
+    Check -->|no| Jev["Jev / TypeSafe<br/>One request: operation + target choices"]
     Jev --> Guard[Freshness + target checks]
-    Guard -->|supported action| Browser[Puppeteer / Chrome\nDirect CDP or extension relay]
+    Guard -->|supported action| Browser["Puppeteer / Chrome<br/>Direct CDP or extension relay"]
     Browser --> Observe
     Jev -->|text or reasoning handoff| Host
 ```

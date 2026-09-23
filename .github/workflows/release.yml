@@ -43,7 +43,8 @@ jobs:
             name=$(echo $t | sed 's/^bun-//; s/-baseline$//')
             bun run scripts/build.ts all --target $t --outfile dist/jev-browser-use-$name
           done
-          cd dist && sha256sum jev-browser-use-* > SHA256SUMS && cat SHA256SUMS
+          cp LICENSE THIRD_PARTY_NOTICES.md dist/
+          cd dist && sha256sum jev-browser-use-* LICENSE THIRD_PARTY_NOTICES.md > SHA256SUMS && cat SHA256SUMS
       - name: Smoke test linux-x64 binary
         run: |
           chmod +x dist/jev-browser-use-linux-x64
@@ -87,3 +88,5 @@ jobs:
           files: |
             dist/jev-browser-use-*
             dist/SHA256SUMS
+            dist/LICENSE
+            dist/THIRD_PARTY_NOTICES.md

@@ -57,11 +57,12 @@ for target in bun-linux-x64-baseline bun-linux-arm64 bun-darwin-arm64 bun-darwin
   asset="${target#bun-}"
   bun run scripts/build.ts all --target "$target" --outfile "dist/jev-browser-use-${asset%-baseline}"
 done
-(cd dist && shasum -a 256 jev-browser-use-* > SHA256SUMS)
+cp LICENSE THIRD_PARTY_NOTICES.md dist/
+(cd dist && shasum -a 256 jev-browser-use-* LICENSE THIRD_PARTY_NOTICES.md > SHA256SUMS)
 # Write concrete validation results and any untested target limitations to release-notes.md outside the repo.
 gh release create "v$(bun -p 'require("./package.json").version')" \
   --target main --title "jev-browser-use $(bun -p 'require("./package.json").version')" \
-  --notes-file /absolute/path/to/release-notes.md dist/jev-browser-use-* dist/SHA256SUMS
+  --notes-file /absolute/path/to/release-notes.md dist/jev-browser-use-* dist/SHA256SUMS dist/LICENSE dist/THIRD_PARTY_NOTICES.md
 ```
 
 Verify remote source, visibility, asset hashes and the downloaded native binary after publication. Cross-compiled targets
