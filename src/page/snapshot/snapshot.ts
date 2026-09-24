@@ -10,7 +10,7 @@ import { INPAGE_SCRIPT } from "./inpage.ts";
 const STATE = new WeakMap<Page, SnapshotState>();
 
 /** Max iframe nesting depth (main frame = 0). */
-const MAX_FRAME_DEPTH = 3;
+const MAX_FRAME_DEPTH = 16;
 
 export function getSnapshotState(page: Page): SnapshotState {
   let s = STATE.get(page);
@@ -83,7 +83,7 @@ interface Ctx {
  * new document (including reloads and renderer swaps) and retained for
  * same-document navigation.
  */
-async function frameDocument(frame: Frame): Promise<DocumentContext> {
+export async function frameDocument(frame: Frame): Promise<DocumentContext> {
   const realm = homeRealm(frame);
   if (!realm.context) await realm.evaluate("0");
   if (!realm.context) throw new Error("Frame execution context is unavailable");
@@ -91,7 +91,7 @@ async function frameDocument(frame: Frame): Promise<DocumentContext> {
 }
 
 /** Frame keys are stable per document and never reused. */
-function frameKeyFor(state: SnapshotState, frame: Frame, document: object): string {
+export function frameKeyFor(state: SnapshotState, frame: Frame, document: object): string {
   let key = state.frameKeys.get(document);
   if (!key) {
     key = `f${++state.nextFrameKey}`;
@@ -105,7 +105,7 @@ function frameKeyFor(state: SnapshotState, frame: Frame, document: object): stri
   return key;
 }
 
-function pruneDetachedFrames(state: SnapshotState): void {
+export function pruneDetachedFrames(state: SnapshotState): void {
   for (const [key, target] of state.frames) {
     if (target.frame.detached || homeRealm(target.frame).context !== target.document) state.frames.delete(key);
   }
@@ -154,7 +154,8 @@ async function snapshotFrame(
       if (!contentFrame) {
         suffix = " [unavailable]";
       } else if (frameDepth >= MAX_FRAME_DEPTH) {
-        suffix = "";
+        suffix = " [frame depth limit]";
+        ctx.droppedLines++;
       } else {
         try {
           const document = await frameDocument(contentFrame);

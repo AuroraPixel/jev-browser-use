@@ -13,6 +13,7 @@
  * Flags given to `jev-browser-use mcp` (-b, --headless, --connect, -t, --idle-timeout,
  * --quiet-page) are the defaults for every tool call.
  */
+import { checkpointSchema, planSchema, routingSchema } from "../jev/schema.ts";
 import { jevConfigFromEnv, jevScript } from "../shared/jev.ts";
 import * as fs from "node:fs";
 import type { GlobalFlags } from "../cli/args.ts";
@@ -56,7 +57,7 @@ const TOOLS = [
   },
   {
     name: "jev_browser_use_jev",
-    description: "Delegate an entire bounded browsing goal to Jev. It continuously observes, decides and acts inside the daemon; omit maxSteps to avoid per-click host round trips. Initialize its URL with jev_browser_use_run. Pass known text in run-only inputs, bound to exact URL and unique accessible field label, to avoid text handoffs. Otherwise needs_text asks the host for text: resume with sessionId/requestId/text. needs_host requests host reasoning or help: inspect handoffReason, assist, then resume without text. paused is a burst/stale-text boundary. DONE is unverified: independently check the outcome. Includes per-phase timings and decision trace. No separate text-model key needed.",
+    description: "Execute a bounded browser task with a warm local loop. Prefer a host-authored plan for multi-step work: known targets run locally, unresolved semantic targets use Jev, and conditional stages advance on verified page evidence. Read help jev-plans; derive labels from observation, not guesses. A goal without plan retains the generic Jev loop. Omit maxSteps to avoid per-click host round trips. Initialize its URL with jev_browser_use_run. needs_text asks the native host to write text and resume; needs_host asks for interpretation or repair. Resume uses single-use sessionId/requestId. plan_complete or DONE still requires independent task verification. No separate text-model API key needed.",
     inputSchema: {
       type: "object", additionalProperties: false,
       properties: {
@@ -69,25 +70,9 @@ const TOOLS = [
         maxSteps: { type: "integer", minimum: 1, maximum: 30, description: "Optional short burst. Omit to continue until text/help/completion or the session budget." },
         stepLimit: { type: "integer", minimum: 1, maximum: 100, description: "Total session actions (default 60), run only." },
         diagnostics: { type: "string", enum: ["summary", "full"], description: "Run/status only. Summary (default) omits probability maps from host results. Full retains distributions for debugging; status full retrieves them without rerunning actions." },
-        until: {
-          type: "object", additionalProperties: false, minProperties: 1,
-          description: "Run-only AND checkpoint: stop as soon as fresh visible page evidence matches, without another Jev call. Use known URL/text/field expectations. Mutually exclusive with submission completion. All evidence still needs independent host verification.",
-          properties: {
-            url: { type: "object", additionalProperties: false, required: ["origin"], properties: {
-              origin: { type: "string", description: "HTTP(S) origin only, e.g. https://x.com." },
-              pathname: { type: "string", description: "Exact literal path starting with /; excludes query/fragment." },
-              pathnameIncludes: { type: "string", description: "Literal path fragment starting with /, e.g. /status/. Not a regex." },
-            } },
-            text: { type: "array", minItems: 1, maxItems: 10, items: { type: "string", minLength: 1, maxLength: 500 }, description: "Every fragment must appear in visible text (whitespace normalized, case-insensitive by default)." },
-            matchCase: { type: "boolean", description: "Require exact case for text fragments (default false). Does not affect exact field values." },
-            fields: { type: "array", minItems: 1, maxItems: 10, items: {
-              type: "object", additionalProperties: false, required: ["label"], properties: {
-                label: { type: "string", minLength: 1, maxLength: 200 }, role: { type: "string" },
-                value: { type: "string", maxLength: 2000 }, checked: { type: "boolean" }, selected: { type: "boolean" },
-              },
-            }, description: "Unique visible field label (optional role) plus at least one expected value/checked/selected state." },
-          },
-        },
+        until: checkpointSchema,
+        plan: planSchema,
+        routing: routingSchema,
         inputs: {
           type: "array", maxItems: 20,
           description: "Run-only known text, consumed once on an exact URL and unique accessible field label. Avoid host round trips for known queries or an already-written reply. Unknown fields still ask the host. Total text at most 20000 characters; do not include secrets.",
@@ -98,11 +83,14 @@ const TOOLS = [
           } },
         },
         completion: {
-          type: "object", additionalProperties: false, required: ["submitLabel", "successText"],
+          type: "object", additionalProperties: false, required: ["submitLabel"],
+          oneOf: [{ required: ["successText"] }, { required: ["after"] }],
           description: "Run-only boundary for ONE authorized final submission. After clicking this exact button, only observe new success feedback; never issue another action. Use labels/messages established from the site. Independently verify the result.",
           properties: {
             submitLabel: { type: "string", minLength: 1, maxLength: 200, description: "Exact accessible name of the final submit button." },
             successText: { type: "string", minLength: 1, maxLength: 500, description: "Expected text in a new/changed visible alert/status/live region." },
+            before: { ...checkpointSchema, description: "Required fresh pre-submit conditions. Any unmet check blocks submission." },
+            after: { ...checkpointSchema, description: "Post-submit evidence, absent before dispatch. Use instead of successText when the result is ordinary page content." },
           },
         },
         browser: { type: "string" }, headless: { type: "boolean" }, connect: { type: "string" },
@@ -124,7 +112,7 @@ const TOOLS = [
   },
   {
     name: "jev_browser_use_help",
-    description: "The jev-browser-use usage guide (or one topic: quickstart, workflow, scripts, pages, snapshot, refs, screenshots, waiting, forms, errors, output, connect, extension, chrome, config, json, jev, examples, tips).",
+    description: "The jev-browser-use usage guide (or one topic: quickstart, workflow, scripts, pages, snapshot, refs, screenshots, waiting, forms, errors, output, connect, extension, chrome, config, json, jev, jev-plans, examples, tips).",
     inputSchema: { type: "object", properties: { topic: { type: "string" } } },
   },
 ];
@@ -284,7 +272,7 @@ export async function mcpMain(flags: GlobalFlags): Promise<number> {
             capabilities: { tools: {} },
             serverInfo: { name: "jev-browser-use", version: VERSION },
             instructions:
-              "Drive a browser with short Puppeteer scripts via jev_browser_use_run. Workflow: getPage(name) -> goto -> page.snapshot({interactive:true}) -> act via 'ref/eN' selectors -> verify with a tracked snapshot or page.shot(). Optional jev_browser_use_jev runs Jev on a named tab: handle needs_text by supplying your own text via resume, and independently verify done. Call jev_browser_use_help for the full guide.",
+              "Use jev_browser_use_run to initialize a named page and observe it. For multi-step tasks, prefer a conditional plan in jev_browser_use_jev: grounded actions execute locally, semantic choices use Jev, and stages advance on verified evidence. Keep unfamiliar widgets as goal stages. Read help jev-plans; do not invent labels. Handle needs_text by writing with your native model and resuming. Handle needs_host by inspecting or replanning. Independently verify the final task. Direct Puppeteer scripts remain available for host work.",
           });
           return;
         case "notifications/initialized":

@@ -1,0 +1,92 @@
+{
+  "table2Choice": {
+    "chosen": [
+      "Doe",
+      "Jason",
+      "jdoe@hotmail.com",
+      "$100.00",
+      "http://www.jdoe.com",
+      "edit delete"
+    ],
+    "ranked": [
+      [
+        "Doe",
+        "Jason",
+        "jdoe@hotmail.com",
+        "$100.00",
+        "http://www.jdoe.com",
+        "edit delete"
+      ],
+      [
+        "Bach",
+        "Frank",
+        "fbach@yahoo.com",
+        "$51.00",
+        "http://www.frank.com",
+        "edit delete"
+      ],
+      [
+        "Conway",
+        "Tim",
+        "tconway@earthlink.net",
+        "$50.00",
+        "http://www.timconway.com",
+        "edit delete"
+      ],
+      [
+        "Smith",
+        "John",
+        "jsmith@gmail.com",
+        "$50.00",
+        "http://www.jsmith.com",
+        "edit delete"
+      ]
+    ]
+  },
+  "frameContents": {
+    "frames": [
+      {
+        "name": "frame-bottom",
+        "text": "BOTTOM",
+        "url": "https://the-internet.herokuapp.com/frame_bottom"
+      },
+      {
+        "name": "frame-left",
+        "text": "LEFT",
+        "url": "https://the-internet.herokuapp.com/frame_left"
+      },
+      {
+        "name": "frame-middle",
+        "text": "MIDDLE",
+        "url": "https://the-internet.herokuapp.com/frame_middle"
+      },
+      {
+        "name": "frame-right",
+        "text": "RIGHT",
+        "url": "https://the-internet.herokuapp.com/frame_right"
+      }
+    ],
+    "values": [
+      "LEFT",
+      "MIDDLE",
+      "RIGHT",
+      "BOTTOM"
+    ]
+  },
+  "count": {
+    "deleteCount": 1,
+    "url": "https://the-internet.herokuapp.com/add_remove_elements/"
+  },
+  "dynamicResult": {
+    "text": "Dynamically Loaded Page Elements\nExample 2: Element rendered after the fact\n\n\nHello World!\n\n\nPowered by Elemental Selenium",
+    "url": "https://the-internet.herokuapp.com/dynamic_loading/2"
+  },
+  "tableSubmission": {
+    "text": "Form submitted\n\nReceived!",
+    "url": "https://www.selenium.dev/selenium/web/submitted-form.html?my-text=Jason+Doe&my-password=&my-textarea=jdoe%40hotmail.com&my-readonly=Readonly+input&my-select=2&my-datalist=&my-file=&my-check=on&my-radio=on&my-colors=%23563d7c&my-date=&my-range=5&my-hidden="
+  },
+  "frameSubmission": {
+    "text": "Form submitted\n\nReceived!",
+    "url": "https://www.selenium.dev/selenium/web/submitted-form.html?my-text=Frame+check&my-password=&my-textarea=LEFT+%7C+MIDDLE+%7C+RIGHT+%7C+BOTTOM&my-readonly=Readonly+input&my-select=3&my-datalist=&my-file=&my-check=on&my-radio=on&my-colors=%23563d7c&my-date=&my-range=5&my-hidden="
+  }
+}

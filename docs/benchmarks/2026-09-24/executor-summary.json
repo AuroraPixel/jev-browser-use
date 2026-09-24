@@ -1,0 +1,56 @@
+{
+  "medians": {
+    "codex-browser-use": {
+      "selenium-form": {
+        "navigationMs": 201.46225000917912,
+        "executionMs": 1159.1329589933157,
+        "workflowMs": 1348.9508330076933
+      },
+      "selenium-dynamic": {
+        "navigationMs": 30.23520800471306,
+        "executionMs": 1172.669166997075,
+        "workflowMs": 1200.928916990757
+      },
+      "internet-controls": {
+        "navigationMs": 390.0630419999361,
+        "executionMs": 906.180790990591,
+        "workflowMs": 1296.4864170104265
+      },
+      "internet-dynamic": {
+        "navigationMs": 382.3360839933157,
+        "executionMs": 12583.560541003942,
+        "workflowMs": 12967.710709005594
+      }
+    },
+    "jev-local-plan": {
+      "selenium-form": {
+        "navigationMs": 283.7622089982033,
+        "executionMs": 596.1423330008984,
+        "workflowMs": 880.5403330028057
+      },
+      "selenium-dynamic": {
+        "navigationMs": 66.74358300119638,
+        "executionMs": 1171.490042001009,
+        "workflowMs": 1234.4573330059648
+      },
+      "internet-controls": {
+        "navigationMs": 1292.751791998744,
+        "executionMs": 555.1542090028524,
+        "workflowMs": 1833.1218750029802
+      },
+      "internet-dynamic": {
+        "navigationMs": 331.89091600477695,
+        "executionMs": 12362.529124997556,
+        "workflowMs": 12734.097791999578
+      }
+    }
+  },
+  "geometricMeanNativeOverJev": {
+    "executionMs": 1.341001942033962,
+    "workflowMs": 1.0178644873209646
+  },
+  "measuredTrials": 40,
+  "verifiedTrials": 40,
+  "jevApiAttempts": 0,
+  "inferenceMeasured": false
+}

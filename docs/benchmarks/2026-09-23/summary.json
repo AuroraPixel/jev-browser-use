@@ -1,0 +1,160 @@
+{
+  "medians": {
+    "codex-computer-use": {
+      "selenium-form": {
+        "navigationMs": 985.1260839998722,
+        "executionMs": 3892.295000001788,
+        "workflowMs": 4761.263833999634
+      },
+      "selenium-dynamic": {
+        "navigationMs": 968.2262080013752,
+        "executionMs": 1733.8990840017796,
+        "workflowMs": 2702.5024590045214
+      },
+      "internet-controls": {
+        "navigationMs": 2043.8424169942737,
+        "executionMs": 3982.383333005011,
+        "workflowMs": 5943.116250000894
+      },
+      "internet-dynamic": {
+        "navigationMs": 1223.996375001967,
+        "executionMs": 13321.30983299762,
+        "workflowMs": 14531.643209002912
+      }
+    },
+    "codex-browser-use": {
+      "selenium-form": {
+        "navigationMs": 128.29112499952316,
+        "executionMs": 1296.2734590023756,
+        "workflowMs": 1620.8159999996424
+      },
+      "selenium-dynamic": {
+        "navigationMs": 30.773125000298023,
+        "executionMs": 1165.4403750002384,
+        "workflowMs": 1201.0280829966068
+      },
+      "internet-controls": {
+        "navigationMs": 2046.8015000000596,
+        "executionMs": 887.084791995585,
+        "workflowMs": 3025.936124995351
+      },
+      "internet-dynamic": {
+        "navigationMs": 306.0893339961767,
+        "executionMs": 12609.77266599983,
+        "workflowMs": 12944.155374996364
+      }
+    },
+    "jev-browser-use": {
+      "selenium-form": {
+        "navigationMs": 244.01758400024846,
+        "executionMs": 2111.302167000249,
+        "workflowMs": 2367.5626250002533
+      },
+      "selenium-dynamic": {
+        "navigationMs": 69.98570799967274,
+        "executionMs": 1516.1292079999112,
+        "workflowMs": 1916.829417000059
+      },
+      "internet-controls": {
+        "navigationMs": 1494.393790999893,
+        "executionMs": 957.6032920000143,
+        "workflowMs": 2491.201624999754
+      },
+      "internet-dynamic": {
+        "navigationMs": 631.8916670000181,
+        "executionMs": 12714.048249999993,
+        "workflowMs": 13319.502582999878
+      }
+    }
+  },
+  "speedRatios": {
+    "codex-computer-use": {
+      "selenium-form": 1.8435518424783244,
+      "selenium-dynamic": 1.1436354334794143,
+      "internet-controls": 4.158698457152914,
+      "internet-dynamic": 1.0477630390460118
+    },
+    "codex-browser-use": {
+      "selenium-form": 0.6139687057888681,
+      "selenium-dynamic": 0.7686946263225783,
+      "internet-controls": 0.9263593801383587,
+      "internet-dynamic": 0.9917983963919468
+    }
+  },
+  "geometricMeanSpeedRatios": {
+    "codex-computer-use": 1.7409683093246149,
+    "codex-browser-use": 0.8114761246070803
+  },
+  "publicationGatePassed": false,
+  "measuredTrials": 60,
+  "verifiedTrials": 60,
+  "workflowsGeometricMeanSpeedRatios": {
+    "codex-computer-use": 1.6481960450457667,
+    "codex-browser-use": 0.8435476720909877
+  },
+  "gate": {
+    "allJevVerified": true,
+    "successNoWorseThanBoth": true,
+    "bothSiteFamiliesFasterThanBoth": false,
+    "bothExecutionGeomeansAbove1_15": false,
+    "result": false
+  },
+  "jevApiAttempts": 22,
+  "jevActions": 85,
+  "fullTrialRangeSeconds": {
+    "codex-computer-use": {
+      "selenium-form": [
+        3.716861042000353,
+        4.049083541996777
+      ],
+      "selenium-dynamic": [
+        1.6896287910044194,
+        1.7564385420009494
+      ],
+      "internet-controls": [
+        3.848865708000958,
+        4.246314874999225
+      ],
+      "internet-dynamic": [
+        13.21835337499529,
+        13.347717957995831
+      ]
+    },
+    "codex-browser-use": {
+      "selenium-form": [
+        1.1769664580002428,
+        2.3666017080023884
+      ],
+      "selenium-dynamic": [
+        1.1462782920002936,
+        1.1833972500041128
+      ],
+      "internet-controls": [
+        0.8692909580022097,
+        1.1852883329987527
+      ],
+      "internet-dynamic": [
+        12.493226124994457,
+        12.663621249996126
+      ]
+    },
+    "jev-browser-use": {
+      "selenium-form": [
+        1.3636539580002427,
+        2.565304707999807
+      ],
+      "selenium-dynamic": [
+        1.442992167000193,
+        1.9059544159998185
+      ],
+      "internet-controls": [
+        0.8422055410002358,
+        1.9991745000001975
+      ],
+      "internet-dynamic": [
+        12.514118792000227,
+        13.592609000000172
+      ]
+    }
+  }
+}

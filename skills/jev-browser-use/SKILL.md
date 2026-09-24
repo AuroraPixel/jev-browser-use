@@ -44,6 +44,31 @@ CLI and MCP should use the same JEV_BROWSER_USE_HOME, since the relay permits on
 
 ## Jev delegation
 
+For final submissions, add `completion.before` with current-state requirements and exactly one of `successText`
+(new live-region feedback) or `completion.after` (visible checkpoint absent before dispatch). Inspect `taskState` for
+unmet conditions and full-session counts. A click count is not evidence that quantities or form contents are correct.
+Submission contracts freshly read rendered DOM even when a field/receipt is scrolled offscreen; hidden content does not count.
+After an unconfirmed submit, resume only observes; do not start another submit to test whether the first worked.
+Visible iframe controls use document-scoped `fNeN` refs. Include visible frame origins in plans and bind prepared text
+to the owning frame URL. After `new_window`, use `openedPages[].targetId` with `browser.getPage(targetId)` or refresh
+`browser.listPages()` while attachment completes. Managed popups are adopted; do not reopen them.
+For dynamic SVG/DOM charts, read actual axis labels and use `page.interact({operation:"hover",selector,index,count,
+read:{selector:tooltipSelector,includes:expectedLabel}})`. It re-resolves before input and returns stable visible text.
+Validate every label and series before constructing CSV. Do not read hidden chart state. `interact` clicks are sent
+once; an uncertain dispatch must be inspected, not retried. See `help forms` for limits and ordinary Puppeteer usage.
+
+For multi-step tasks, read `jev-browser-use help jev-plans` and prefer a conditional `plan` when useful. Compile one
+bounded program from the observed page: exact known identities run locally, semantic descriptions invoke Jev, and
+stages advance only when their conditions match. Use a goal stage (goal + until, no action) for unfamiliar layouts
+or custom widgets. Keep meaningful completion evidence; do not guess labels or remove necessary candidate choices.
+Origins bound the plan's actions. Native text generation still uses needs_text/resume. Low confidence returns to you.
+Enable target `reuse:true` only for stable identities, never "cheapest", "first unread" or other changing judgments.
+Inspect response `plan` and `trace.source` to distinguish local actions, verified binding reuse and Jev calls.
+If a dispatched stage's feedback is late, resume observes only; do not start another submit.
+For an exact one-off action, an ordinary script is also appropriate. Avoid building a large plan for a trivial task.
+For a fully specified form, batch grounded local actions; do not add semantic descriptions just to force Jev calls.
+Choose Jev when target interpretation is needed. API latency alone is not evidence of a faster complete workflow.
+
 When the installed binary exposes `jev-browser-use help jev` and `TYPESAFE_API_KEY` is configured, delegate a bounded goal
 to Jev on the same named page. The host generates text natively; the key is only for Jev decisions.
 Read `jev-browser-use help jev` first. CLI: `jev-browser-use jev -e '{"page":"main","action":"run","goal":"..."}'`.
@@ -73,6 +98,11 @@ The runtime stops on fresh matching evidence without another Jev request and ret
 Choose conditions specific enough for the delegated stage; opening a post containing Jev does not verify its originality
 or relevance. Read and reason natively before the next stage. Use either `until` or the submission `completion` below.
 If Jev claims DONE before the checkpoint matches, inspect `checkpoint.checks` and resolve the unmet requirements.
+For table results, add `rows:[{text:["Origin","Destination"]}]` to the checkpoint: each group's fragments must occur
+in one rendered data row. Check the date/fields too; query headings are not result evidence. Autocomplete requires
+choosing the actual suggestion after typing. Inspect `taskState.pendingSelections`; recognized pickers block other
+field edits/submission until committed. Unknown widgets still need host verification. Goal-only DONE hands off on
+incomplete observations, pending selections, or confidence below 0.5 by default; never treat typed text as selection.
 
 For a goal ending in one authorized form/message submission, use the run-only `completion` boundary when the site's
 button and success message are known: `completion:{submitLabel:"Reply",successText:"Your post was sent."}` (X English

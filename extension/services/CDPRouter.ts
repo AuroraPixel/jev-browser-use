@@ -21,6 +21,19 @@ export class CDPRouter {
     this.tabManager = deps.tabManager;
   }
 
+  /** Adopt only children of a currently managed tab. Unrelated user tabs stay private. */
+  async adoptPopup(tab: chrome.tabs.Tab): Promise<void> {
+    if (tab.id === undefined || tab.openerTabId === undefined) return;
+    const parent = this.tabManager.get(tab.openerTabId);
+    if (parent?.state !== "connected") return;
+    const allowed = () => this.tabManager.get(tab.openerTabId!) === parent;
+    await this.tabManager.attach(tab.id, allowed, parent.targetId);
+    if (!allowed()) { this.tabManager.detach(tab.id, true); return; }
+    // Popups in separate windows cannot always join the existing tab group.
+    try { await this.getOrCreateJevBrowserUseGroup(tab.id); }
+    catch (error) { this.logger.debug("Popup attached without grouping:", error); }
+  }
+
   /**
    * Gets or creates the "jev-browser-use" tab group, returning its ID.
    */
@@ -104,6 +117,9 @@ export class CDPRouter {
           throw new Error(
             `No debuggee found for Runtime.enable (sessionId: ${msg.params.sessionId})`
           );
+        }
+        if (msg.params.sessionId && msg.params.sessionId !== targetTab?.sessionId) {
+          return await chrome.debugger.sendCommand({ ...debuggee, sessionId: msg.params.sessionId }, "Runtime.enable", msg.params.params);
         }
         // Disable and re-enable to reset state
         try {

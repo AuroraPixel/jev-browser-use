@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Add fresh pre-submit conditions, post-submit checkpoints and persistent task progress; uncertain submissions remain observe-only.
+- Observe visible nested iframe controls with document-scoped refs; adopt managed popups and retain opener/URL changes.
+- Add bounded `page.interact` relocation and label-checked tooltip reading, with rendering leases during normal actions/waits.
+
+- Commit recognized autocomplete selections before other edits/submission; support keyboard-driven display/identity pickers without exposing hidden values.
+- Add same-row result checkpoints and reject goal-only DONE on pending selections, incomplete observations or low confidence.
+- Conditional browser plans with native host authoring, local exact actions, dynamic Jev goal stages and evidence-based branches.
+- Verified, bounded in-memory semantic bindings with document/context/competitor invalidation.
+- Configurable confidence handoffs, observation-only waiting and per-stage routing diagnostics.
+- Intrinsic text/checkbox/dropdown verification, including duplicate-valued native options; no replay while awaiting action evidence.
+- Matched cold/warm plan benchmarks and CLI/MCP documentation.
+
 ## 0.1.0 — 2026-09-23
 
 Initial independent release of **jev-browser-use**.

@@ -1,0 +1,36 @@
+{
+  "measuredWorkflows": 6,
+  "verifiedWorkflows": 6,
+  "jevApiAttempts": 19,
+  "browserToolCalls": {
+    "native": 17,
+    "jev": 9
+  },
+  "pairs": [
+    {
+      "task": "Count and wait",
+      "nativeWallMs": 70036.135458,
+      "jevWallMs": 45844.975459,
+      "nativeOverJev": 1.5276730930008808,
+      "nativeBrowserToolCalls": 7,
+      "jevBrowserToolCalls": 2
+    },
+    {
+      "task": "Read and decide",
+      "nativeWallMs": 183362.226334,
+      "jevWallMs": 107762.095792,
+      "nativeOverJev": 1.7015465872891125,
+      "nativeBrowserToolCalls": 4,
+      "jevBrowserToolCalls": 4
+    },
+    {
+      "task": "Frame handoff",
+      "nativeWallMs": 63357.375625,
+      "jevWallMs": 73181.033959,
+      "nativeOverJev": 0.8657622364354166,
+      "nativeBrowserToolCalls": 6,
+      "jevBrowserToolCalls": 3
+    }
+  ],
+  "publication": "No comparative promotion: executor uses zero Jev model calls; host workflow study is exploratory and not a blind controlled benchmark."
+}

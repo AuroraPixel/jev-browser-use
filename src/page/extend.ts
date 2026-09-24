@@ -48,6 +48,7 @@ import { installRendering, withRendering } from "./rendering.ts";
 import type { JevInput, JevResult } from "../jev/types.ts";
 import { DEFAULTS } from "../shared/config.ts";
 import { shot, type ShotOptions, type ShotResult } from "./shot.ts";
+import { interact, type InteractOptions, type InteractResult } from "./pointer.ts";
 import { fill } from "./fill.ts";
 import { waitForLoad, installLoadTracker, type WaitForLoadOptions, type WaitForLoadResult } from "./wait-for-load.ts";
 import { pageLine, abortedByRun, resolveRunPath } from "../daemon/run-context.ts";
@@ -62,6 +63,7 @@ import {
 } from "./snapshot/index.ts";
 
 export interface JevBrowserUsePage extends Page {
+  interact(options: InteractOptions): Promise<InteractResult>;
   jev(input: JevInput): Promise<JevResult>;
   snapshot(opts?: SnapshotOptions): Promise<string | TrackedSnapshot>;
   ref(id: string): Promise<ElementHandle<Element>>;
@@ -199,7 +201,7 @@ export async function withFront<T>(page: Page, action: () => Promise<T>): Promis
   try {
     if (!joined) await bringToFront(st, page);
     assertJevAvailable(page);
-    return await action();
+    return await withRendering(page, action);
   } finally {
     release(st);
   }
@@ -222,7 +224,7 @@ export async function withFrontWait<T>(page: Page, action: () => Promise<T>): Pr
   st.waiting.delete(page);
   st.waiting.set(page, n + 1);
   try {
-    return await action();
+    return await withRendering(page, action);
   } finally {
     const left = (st.waiting.get(page) ?? 1) - 1;
     if (left <= 0) st.waiting.delete(page);
@@ -526,6 +528,7 @@ export function extendPage(page: Page): JevBrowserUsePage {
   }
 
   // helpers
+  p.interact = (options: InteractOptions) => withFront(page, () => interact(page, options));
   p.jev = (input: JevInput) => jev(page, input);
   p.snapshot = (opts?: SnapshotOptions) => snapshot(page, opts);
   p.ref = (id: string) => resolveRef(page, id);

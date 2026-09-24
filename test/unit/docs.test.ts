@@ -28,7 +28,8 @@ function section(name: string): string {
 }
 
 test("help.md stays within the line budget and every topic is present", () => {
-  expect(HELP.replace(/\n$/, "").split("\n").length).toBeLessThanOrEqual(330); // as `wc -l`
+  expect(HELP.replace(/\n$/, "").split("\n").length).toBeLessThanOrEqual(355); // Includes the conditional-plan topic.
+  expect(HELP).toContain("\n## jev-plans\n");
   for (const t of "quickstart workflow scripts pages snapshot refs screenshots waiting forms errors output connect chrome config migration json mcp examples tips".split(" ")) {
     expect(HELP).toContain(`\n## ${t}\n`);
   }

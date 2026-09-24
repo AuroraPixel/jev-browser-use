@@ -5,6 +5,7 @@ import { test, expect, afterAll, beforeAll } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { startServer } from "./helpers/server.ts";
 
 const ROOT = path.resolve(import.meta.dir, "..");
 let home: string;
@@ -76,6 +77,9 @@ test("initialize + tools/list", async () => {
   const list = await rpc("tools/list", {});
   const names = list.result.tools.map((t: any) => t.name);
   expect(names).toEqual(["jev_browser_use_run", "jev_browser_use_jev", "jev_browser_use_pages", "jev_browser_use_browsers", "jev_browser_use_stop", "jev_browser_use_help"]);
+  const jev = list.result.tools.find((t: any) => t.name === "jev_browser_use_jev");
+  expect(jev.inputSchema.properties.plan.properties.stages.items.properties.action).toBeDefined();
+  expect(jev.inputSchema.properties.routing.properties.minConfidence.maximum).toBe(1);
 }, 20_000);
 
 test("jev_browser_use_run returns text + image content, errors set isError", async () => {
@@ -114,6 +118,32 @@ test("Jev MCP returns structured handoff/error state without a text model; valid
   expect(r.result.structuredContent.reason).toContain("TYPESAFE_API_KEY");
   const status = await rpc("tools/call", { name: "jev_browser_use_jev", arguments: { page: "m", action: "status", sessionId: r.result.structuredContent.sessionId } });
   expect(status.result.structuredContent.sessionId).toBe(r.result.structuredContent.sessionId);
+});
+
+test("MCP executes a conditional plan and returns its routing evidence without any model key", async () => {
+  const server = await startServer({ "/": '<input aria-label="Name"><label><input type=checkbox>Enabled</label>' });
+  try {
+    const url = server.url("/");
+    await rpc("tools/call", { name: "jev_browser_use_run", arguments: {
+      script: 'const p = await browser.getPage("plan"); await p.goto(' + JSON.stringify(url) + ');',
+    } });
+    const r = await rpc("tools/call", { name: "jev_browser_use_jev", arguments: {
+      page: "plan", action: "run", goal: "Set profile", plan: {
+        origins: [new URL(url).origin], targets: { name: { label: "Name" }, enabled: { label: "Enabled" } },
+        stages: [
+          { id: "name", goal: "Fill Name", action: { operation: "TYPE_TEXT", target: "name", text: "Ada" } },
+          { id: "enable", goal: "Enable", action: { operation: "CLICK", target: "enabled", checked: true } },
+        ],
+      },
+    } });
+    expect(r.result.isError).toBe(false);
+    expect(r.result.structuredContent).toMatchObject({ status: "done", stopReason: "plan_complete", decisions: 0, steps: 2, plan: { localActions: 2 } });
+    const actual = await rpc("tools/call", { name: "jev_browser_use_run", arguments: {
+      script: 'const p = await browser.getPage("plan"); await p.$$eval("input", es => es.map(e => ({value:e.value, checked:e.checked})))',
+    } });
+    expect(actual.result.content[0].text).toContain("Ada");
+    expect(actual.result.content[0].text).toContain("true");
+  } finally { await server.stop(); }
 });
 
 test("MCP cancellation closes the run socket and prevents late script mutation", async () => {

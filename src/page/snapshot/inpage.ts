@@ -23,7 +23,9 @@
  * backticks or "${" inside the script body.
  */
 
-export const INPAGE_VERSION = 14;
+import { PICKER_HELPERS } from './pickers.ts';
+
+export const INPAGE_VERSION = 17;
 
 export const INPAGE_SCRIPT: string = String.raw`(() => {
   if (window.__jevBrowserUse && window.__jevBrowserUse.version === ${INPAGE_VERSION}) return;
@@ -1044,6 +1046,7 @@ export const INPAGE_SCRIPT: string = String.raw`(() => {
   // Scoped semantic guards adapted from jev-ultrafast. A changing sidebar or
   // animation must not invalidate an unrelated click. Document/form state,
   // target identity, meaning and surrounding context still have to match.
+  ${PICKER_HELPERS}
   const jevIds = refState.jevIds || (refState.jevIds = new WeakMap());
   function jevIdentity(e) {
     if (!jevIds.has(e)) jevIds.set(e, refState.jevNext = (refState.jevNext || 0) + 1);
@@ -1053,7 +1056,8 @@ export const INPAGE_SCRIPT: string = String.raw`(() => {
     return JSON.stringify([refState.documentId, location.href, scrollX, scrollY, innerWidth, innerHeight,
       [...document.querySelectorAll('input,textarea,select,[contenteditable="true"]')]
         .filter(e => !["password","file","hidden"].includes(e.type))
-        .map(e => [jevIdentity(e), e.value ?? (e.textContent ? e.innerText : ""), e.checked, e.selectedIndex, e.disabled, e.readOnly])]);
+        .map(e => [jevIdentity(e), e.value ?? (e.textContent ? e.innerText : ""), e.checked, e.selectedIndex, e.disabled, e.readOnly,
+          jevBackingField(e)?.value, jevSelectionPending(e)])]);
   }
   // Some forms put a checkbox's caption beside it without a <label>. Read
   // only adjacent inline text, stopping at another control or a row boundary.
@@ -1087,7 +1091,7 @@ export const INPAGE_SCRIPT: string = String.raw`(() => {
     // identity. Video timers elsewhere in its article are not its semantics.
     const navigation = e.tagName === 'A' && /^https?:/.test(e.href);
     const strictContext = !navigation || scope?.matches('label,fieldset,form,dialog,[role="dialog"]');
-    return JSON.stringify([jevIdentity(e), getAriaRole(e), normalizeWhiteSpace(getElementAccessibleName(e, false) || ""), jevAdjacentCaption(e),
+    return JSON.stringify([jevIdentity(e), getAriaRole(e), normalizeWhiteSpace(getElementAccessibleName(e, false) || ""), jevAdjacentCaption(e), jevFieldCaption(e),
       e.value ?? (e.isContentEditable ? (e.textContent ? e.innerText : "") : null), e.type, e.checked, e.selectedIndex, e.readOnly,
       e.matches(':disabled'), getAriaDisabled(e), e.getAttribute('aria-readonly'),
       e.getAttribute('aria-expanded'), e.getAttribute('aria-checked'), e.getAttribute('aria-selected'), e.getAttribute('href'), navigation ? e.href : null,
@@ -1112,10 +1116,12 @@ export const INPAGE_SCRIPT: string = String.raw`(() => {
       top && (e === top || e.contains(top)) && (!clicking || jevHit(e, true)) ? e : null;
   }
 
+  let jevViewport;
   function jevHit(e, clicking = false) {
     const r = e.getBoundingClientRect();
-    const left = Math.max(0,r.left), right = Math.min(innerWidth,r.right);
-    const top = Math.max(0,r.top), bottom = Math.min(innerHeight,r.bottom);
+    const v = jevViewport || { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+    const left = Math.max(v.left,r.left), right = Math.min(v.right,r.right);
+    const top = Math.max(v.top,r.top), bottom = Math.min(v.bottom,r.bottom);
     if (right <= left || bottom <= top) return false;
     const x = (left+right)/2, y = (top+bottom)/2;
     let hit = document.elementFromPoint(x,y);
@@ -1135,10 +1141,11 @@ export const INPAGE_SCRIPT: string = String.raw`(() => {
 
   // Structured, viewport-limited action table for Jev. Uses the same accessible
   // names and ref registry as normal snapshots, in the isolated realm.
-  function jevSnapshot() {
-    refState.frameKey = "";
+  function jevSnapshot(opts = {}) {
+    refState.frameKey = opts.refPrefix || "";
+    jevViewport = opts.clip || { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
     if (!refState.documentId) refState.documentId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : Date.now() + ":" + Math.random();
-    const elements = [], texts = [], disabledControls = [];
+    const elements = [], texts = [], disabledControls = [], iframes = [];
     let unsupportedFrames = false, truncated = false;
     const roots = [document], nodes = [];
     for (let i=0;i<roots.length;i++) for (const e of roots[i].querySelectorAll('*')) {
@@ -1147,7 +1154,7 @@ export const INPAGE_SCRIPT: string = String.raw`(() => {
     }
     const onscreen = e => {
       const r = e.getBoundingClientRect();
-      return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth &&
+      return r.width > 0 && r.height > 0 && (opts.checkpoint || (r.bottom > jevViewport.top && r.right > jevViewport.left && r.top < jevViewport.bottom && r.left < jevViewport.right)) &&
         !closestCrossShadow(e, '[inert],[aria-hidden="true"]') && e.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
     };
     // Reuse the accessible-name/ref implementation only for actionable controls,
@@ -1156,7 +1163,11 @@ export const INPAGE_SCRIPT: string = String.raw`(() => {
     try {
       for (const e of nodes) {
         if (!onscreen(e)) continue;
-        if (e.matches('iframe,frame')) { unsupportedFrames = true; continue; }
+        if (e.matches('iframe,frame')) {
+          const node = toAriaNode(e, {}, false);
+          if (node?.ref && jevHit(e)) iframes.push({ ref: refState.frameKey + node.ref });
+          continue;
+        }
         const role = getAriaRole(e) || 'generic';
         // CSS-only click affordances also occur on divs with addEventListener.
         // Keep the ancestor that owns the pointer cursor, not all its children.
@@ -1169,11 +1180,11 @@ export const INPAGE_SCRIPT: string = String.raw`(() => {
         const type = (e.type || "").toLowerCase();
         if (type === 'password' || type === 'file') continue;
         const node = toAriaNode(e, {}, pointerInherited);
-        const label = node && (node.name || e.getAttribute("placeholder") || e.getAttribute("title") || jevAdjacentCaption(e) || normalizeWhiteSpace(e.innerText || '').slice(0, 200) || node.role);
+        const label = node && (node.name || jevFieldCaption(e) || e.getAttribute("placeholder") || e.getAttribute("title") || jevAdjacentCaption(e) || normalizeWhiteSpace(e.innerText || '').slice(0, 200) || node.role);
         if (node?.ref && (getAriaDisabled(e) || e.matches(':disabled')) && disabledControls.length < 150) {
-          disabledControls.push({ref: node.ref, role: node.role, label});
+          disabledControls.push({ref: refState.frameKey + node.ref, role: node.role, label});
         }
-        if (node?.ref && !getAriaDisabled(e) && !e.matches(":disabled") && jevHit(e)) {
+        if (node?.ref && !getAriaDisabled(e) && !e.matches(":disabled") && (opts.checkpoint || jevHit(e))) {
           const operations = [];
           const editable = (e.tagName === "INPUT" && !["hidden","password","checkbox","radio","file","submit","reset","button","image"].includes(type)) || e.tagName === "TEXTAREA" || e.isContentEditable;
           if (editable && !e.readOnly && e.getAttribute("aria-readonly") !== "true") operations.push("TYPE_TEXT");
@@ -1182,19 +1193,23 @@ export const INPAGE_SCRIPT: string = String.raw`(() => {
             options = [...e.options].map((o, i) => ({ index: String(i), label: o.label, value: o.value, disabled: o.disabled || !!o.closest("optgroup[disabled]") }))
               .filter(o => !o.disabled).map(({disabled, ...o}) => o);
             if (options.length) operations.push("SELECT");
-          } else if (type !== "password" && type !== "file" && node.role !== "iframe" && isInteractiveNode(node) && !e.isContentEditable && jevHit(e, true)) operations.push("CLICK");
+          } else if (type !== "password" && type !== "file" && node.role !== "iframe" && isInteractiveNode(node) && !e.isContentEditable &&
+              (!editable || e.readOnly || jevIsPicker(e) || e.hasAttribute('aria-haspopup') || ['date','datetime-local','time','month','week','color'].includes(type)) && (opts.checkpoint || jevHit(e, true))) operations.push("CLICK");
           // An article with an explicit permalink has a precise navigation
           // target; its large surface can route clicks to embedded media.
           if (node.role === 'article' && operations.includes('CLICK') && e.querySelector('a[href] time,a[rel~="bookmark"]')) operations.splice(operations.indexOf('CLICK'), 1);
           if (operations.length) {
             if (elements.length >= 150) truncated = true;
             else elements.push({
-              ref: node.ref, role: node.role,
+              ref: refState.frameKey + node.ref, role: node.role,
               label,
               // LI.value is a list ordinal, not a current form value.
               value: String(editable || e.tagName === 'SELECT' ? e.value ?? (e.textContent ? e.innerText : '') : ''), operations, options,
               checked: node.checked, expanded: node.expanded, selected: node.selected,
+              selectedIndex: e.tagName === 'SELECT' ? e.selectedIndex : undefined,
               focused: editable && e.getRootNode().activeElement === e || undefined,
+              picker: jevIsPicker(e) || undefined,
+              selectionPending: jevSelectionPending(e) || undefined,
               // Preserve observable CSS state for controls without ARIA. Do
               // not infer checked=true from a generic class such as "active".
               className: node.checked === undefined && node.selected === undefined && typeof e.className === 'string' ? e.className.slice(0, 200) : undefined,
@@ -1205,6 +1220,21 @@ export const INPAGE_SCRIPT: string = String.raw`(() => {
         }
       }
     } finally { endAriaCaches(); }
+    const pendingSelections = nodes.filter(e => jevSelectionPending(e) && e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}) &&
+      !closestCrossShadow(e,'[inert],[aria-hidden="true"]')).map(e => {
+      const node = toAriaNode(e,{},false);
+      return { ref:refState.frameKey+node.ref, label:node.name || jevFieldCaption(e) || e.getAttribute('placeholder') || node.role,
+        value:e.value, options:elements.filter(c => c.operations.includes('CLICK') && jevPickerOption(e,refElement(c.ref),c.label)).map(c=>c.ref) };
+    });
+    const rows = [];
+    let rowChars = 0;
+    for (const e of nodes) if (e.matches('tr,[role="row"]') && onscreen(e) &&
+      e.querySelector('td,[role="cell"],[role="gridcell"]') && !e.querySelector('tr,[role="row"]')) {
+      const value = normalizeWhiteSpace(e.innerText || '');
+      if (!value) continue;
+      if (rows.length >= 100 || rowChars + value.length > 6000) { truncated=true; break; }
+      rows.push(value); rowChars += value.length;
+    }
     // Read actual viewport text once. Aggregated article names otherwise repeat
     // the same post and video timer at each ancestor and fill the context budget.
     let textLength = 0;
@@ -1218,7 +1248,7 @@ export const INPAGE_SCRIPT: string = String.raw`(() => {
             !parent.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})) continue;
         range.selectNodeContents(node);
         const r = range.getBoundingClientRect();
-        if (r.width <= 0 || r.height <= 0 || r.bottom <= 0 || r.right <= 0 || r.top >= innerHeight || r.left >= innerWidth) continue;
+        if (r.width <= 0 || r.height <= 0 || (!opts.checkpoint && (r.bottom <= jevViewport.top || r.right <= jevViewport.left || r.top >= jevViewport.bottom || r.left >= jevViewport.right))) continue;
         texts.push(value); textLength += value.length + 1;
         if (textLength > 6000) { truncated = true; break; }
       }
@@ -1238,9 +1268,9 @@ export const INPAGE_SCRIPT: string = String.raw`(() => {
     return { documentId: refState.documentId, url: location.href, title: document.title,
       text: text.slice(0, 6000), elements, scroll: { x: scrollX, y: scrollY, up: !overlay && scrollY > 1,
       down: !overlay && scrollY + innerHeight < Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight || 0) - 1 },
-      truncated: truncated || text.length > 6000, unsupportedFrames, loading, disabledControls, feedback,
+      truncated: truncated || text.length > 6000, unsupportedFrames, loading, disabledControls, feedback, iframes, pendingSelections, rows,
       guards: { page: jevPageKey(), targets: Object.fromEntries(elements.map(e => [e.ref, jevTargetKey(refElement(e.ref))])) } };
   }
 
-  window.__jevBrowserUse = { jevSnapshot, jevTarget, jevHit, version: ${INPAGE_VERSION}, snapshot, ref: refElement, box: refBox };
+  window.__jevBrowserUse = { jevSnapshot, jevTarget, jevHit, jevBeginEdit, jevBeforeChoice, version: ${INPAGE_VERSION}, snapshot, ref: refElement, box: refBox };
 })()`;

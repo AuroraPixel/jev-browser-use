@@ -74,6 +74,7 @@ export interface TargetInfo {
   title: string;
   url: string;
   attached?: boolean;
+  openerId?: string;
 }
 
 // Popup <-> Background messaging

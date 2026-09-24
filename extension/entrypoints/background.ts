@@ -115,12 +115,14 @@ export default defineBackground(() => {
   );
 
   // Set up event listeners
+  chrome.tabs.onCreated.addListener((tab) => {
+    void cdpRouter.adoptPopup(tab).catch(error => logger.debug("Popup adoption ended:", error));
+  });
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => tabManager.update(tabId, changeInfo));
 
   chrome.tabs.onRemoved.addListener((tabId) => {
-    if (tabManager.has(tabId)) {
-      logger.debug("Tab closed:", tabId);
-      tabManager.detach(tabId, false);
-    }
+    logger.debug("Tab closed:", tabId);
+    tabManager.detach(tabId, false);
   });
 
   // Register debugger event listeners

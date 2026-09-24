@@ -184,6 +184,8 @@ FLAGS
   (all awaited; "Meta" on macOS). Dialogs (alert/confirm/prompt) are auto-dismissed and reported as `[page:NAME] dialog
   alert: msg (auto-dismissed)`; beforeunload is accepted (`(auto-accepted)`, the navigation proceeds). Register
   page.on("dialog", d => d.accept("text")) BEFORE the action to handle one yourself.
+  Dynamic controls: await page.interact({operation:"click",selector:"button.save"}) re-resolves before dispatch; never retries a sent click.
+  await page.interact({operation:"hover",selector:"svg rect.data",index:0,count:6,read:{selector:".tooltip",includes:"00:00"}}) returns {text,attempts,elapsedMs} after stable visible readings.
 
 ## errors
   On failure stderr gets, in order: `Name: message`, up to 5 stack frames `    at <stdin>:LINE:COL` (script lines only;
@@ -264,19 +266,22 @@ FLAGS
   images as image content), jev_browser_use_jev (see `help jev`), jev_browser_use_pages, jev_browser_use_browsers, jev_browser_use_stop { browser? }, jev_browser_use_help { topic? }. Flags given
   to `jev-browser-use mcp` are defaults for every call; same daemon and named pages as the CLI, so CLI scripts and MCP calls share pages. Claude Code: `claude mcp add jev-browser-use -- jev-browser-use mcp --headless`.
 ## jev
+  Multi-step work can use a conditional plan; see help jev-plans. Goal-only delegation remains supported.
   Set TYPESAFE_API_KEY in CLI/MCP environment; no text-model key. Initialize a named page/URL with a script, then:
     jev-browser-use --headless jev -e '{"page":"main","action":"run","goal":"Search for browser automation"}'
   needs_text: the host agent supplies text using {page,action:"resume",sessionId,requestId,text} from the result.
   needs_host/paused: inspect handoff.source/next/instruction and page/checkpoint; use handoff.resume IDs without text after resolving the cause.
   Run-only inputs:[{url:"https://example.com/search",label:"Search",text:"query"}] consumes known text once on exact URL/unique field.
   until:{url:{origin:"https://x.com",pathnameIncludes:"/status/"},text:["Jev"]} stops on fresh matching evidence, without another Jev call.
-  until is AND; fields:[{label:"First",checked:true}] checks unique fields exactly. Text ignores case/extra whitespace unless matchCase:true.
+  until is AND; fields:[{label:"First",checked:true}] checks unique fields. rows:[{text:["Origin","Destination"]}] requires both in one data row; text/rows ignore case/extra whitespace unless matchCase:true.
   Omit maxSteps for continuous execution; optional burst: 1..30. stepLimit: 1..100 total (default 60). Default deadline: 60s.
   For one authorized submit use completion:{submitLabel:"Reply",successText:"Your post was sent."}, with observed labels, instead of until.
+  Add completion.before:{fields:[{label:"Quantity",value:"2"}]} and, instead of successText, after:{text:["Receipt created"]}.
+  taskState retains checks/inputs/pendingSelections/counts. Recognized pickers must select a suggestion before other edits/submit. Submit checks include rendered offscreen fields/receipts; hidden text never counts.
   submission_unconfirmed resumes only observe; new_window requires inspecting openedWindows/result tab. Never repeat these actions blindly.
   timing/trace/requests include phases, decisions, stale reasons and HTTP errors. diagnostics:"full" on run/status adds retained probability maps.
   Preserve page/connection on resumes. Duplicate identical resumes do not act twice; only transient inference HTTP errors retry once.
-  done is always verified:false; the host must check the actual outcome using scripts/snapshots. Do not blindly rerun errors.
+  DONE hands off on incomplete observations, pending selections or confidence <0.5 by default. done is always verified:false; the host must check the actual outcome. Do not blindly rerun errors.
   status/stop: {page,action:"status"|"stop",sessionId}. Sessions live in the daemon; stale host text is discarded; mutations never retry.
   Env: TYPESAFE_MODEL (jev-latest), TYPESAFE_PROXY (optional HTTP(S)). Page data goes to TypeSafe; keys stay in private transport.
 
@@ -328,3 +333,23 @@ FLAGS
   - --headless for unattended work; headed (default) to watch (separate profiles). Claude Code: allowlist `Bash(jev-browser-use *)`.
   - Long jobs: --idle-timeout 0 keeps the browser alive; `jev-browser-use stop` when done. -b NAME isolates logins/parallel work.
     For Google/OAuth logins use `jev-browser-use chrome` + `--connect`; automation-launched Chrome is often blocked.
+## jev-plans
+  Host-authored plan: {origins:["https://site.example"],targets:{name:{label:"Name"}},stages:[
+    {id:"name",goal:"Set name",action:{operation:"TYPE_TEXT",target:"name",text:"Ada"}}]}
+  Pass plan alongside {page,action:"run",goal}; use the same CLI/MCP/page.jev entry points. Derive labels from observation.
+  Exact unique labels/hrefs run locally. description adds a semantic constraint resolved by Jev; role/contextIncludes
+  are hard filters. reuse:true caches a verified stable identity in the same document while its candidate set matches.
+  Do not reuse relative judgments (cheapest, first unread). No values or field text are cached; no cache is persisted.
+  Stage: id,goal, optional action,before,until,wait,timeoutMs,next,branches. 1..30 stages; at most 30 targets and 10 origins.
+  TYPE_TEXT verifies text (omit for native host writing); SELECT needs option:{label?,value?} and verifies selected index.
+  CLICK requires until evidence or checked:boolean for checkbox/switch. Already-satisfied conditions skip the action.
+  No action: Jev handles the whole stage goal until its checkpoint (use for unknown/custom controls).
+  wait:true only observes. before must match before acting. until is the same URL/text/fields AND checkpoint as above.
+  After success, first matching branches:[{when:checkpoint,next:"id"}] wins; else next (omitted=following stage,null=end).
+  Local waits default to 5000 ms; timeoutMs=100..30000. A dispatched action is never repeated while awaiting evidence,
+  including after resume. Changed goals require stopping and compiling a new plan from current state.
+  plan owns its text/checkpoints; do not combine with top-level inputs/until/completion. Text total <=20000 chars.
+  routing:{minConfidence:0.5,minTargetConfidence:0.5} defaults for plans; goal-only runs opt in. Tune with real outcomes.
+  Low confidence or leaving allowed origins -> needs_host. Unsupported/partial observations require host assistance.
+  Response plan records stages/localActions/bindingHits/bindingInvalidations/modelCalls; trace.source=local|binding|jev.
+  plan_complete still needs independent verification. Full guide: docs/plans.md. Count host compilation in total latency.

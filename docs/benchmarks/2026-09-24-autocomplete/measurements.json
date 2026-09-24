@@ -1,0 +1,82 @@
+{
+  "date": "2026-09-24",
+  "model": "jev-1.13.0",
+  "runtimeVersion": "0.1.0 (development branch)",
+  "runtimeBinarySha256": "c4c3eb34558e4506af94ace9cf3049dc22e6a1cef0bfe6bbe89f735abb466176",
+  "formalSamples": [
+    {
+      "elapsedMs": 6386,
+      "steps": 7,
+      "apiRequests": 9,
+      "apiSuccesses": 9,
+      "timing": {
+        "decisionMs": 5001,
+        "observeMs": 235,
+        "preflightMs": 22,
+        "actionMs": 131,
+        "settleMs": 974,
+        "hostWaitMs": 0,
+        "wallMs": 6387
+      },
+      "evidence": {
+        "from": "南京",
+        "fromCode": "NJH",
+        "to": "拉萨",
+        "toCode": "LSO",
+        "date": "2026-10-01",
+        "rows": [
+          "Z164\n铺\n南京\n拉萨\n21:19\n15:36\n42:17\n两日到达\n\t--\t--\t--\t--\t--\t候补\t1\t--\t有\t无\t--\t预订"
+        ]
+      },
+      "scenario": "Fresh isolated Chrome: fill both stations and date, then query",
+      "cliDurationMs": 7683
+    },
+    {
+      "elapsedMs": 4442,
+      "steps": 5,
+      "apiRequests": 6,
+      "apiSuccesses": 6,
+      "timing": {
+        "decisionMs": 3043,
+        "observeMs": 367,
+        "preflightMs": 40,
+        "actionMs": 123,
+        "settleMs": 809,
+        "hostWaitMs": 0,
+        "wallMs": 4443
+      },
+      "evidence": {
+        "date": "2026-10-01",
+        "from": "南京",
+        "fromCode": "NJH",
+        "rows": [
+          "Z164\n铺\n南京\n拉萨\n21:19\n15:36\n42:17\n两日到达\n\t--\t--\t--\t--\t--\t候补\t1\t--\t有\t无\t--\t预订"
+        ],
+        "to": "拉萨",
+        "toCode": "LSO"
+      },
+      "scenario": "Existing Chrome extension: replace Beijing/Shanghai with Nanjing/Lhasa, date already set",
+      "before": {
+        "from": "北京",
+        "fromCode": "BJP",
+        "to": "上海",
+        "toCode": "SHH"
+      },
+      "setup": {
+        "elapsedMs": 5477,
+        "apiRequests": 5,
+        "steps": 4
+      },
+      "cliDurationIncludingSetupMs": 10963
+    }
+  ],
+  "validation": {
+    "coreTests": 461,
+    "coreFailures": 0,
+    "newAutocompleteTests": 8,
+    "isolatedExtensionSmoke": "passed",
+    "typecheck": "passed",
+    "build": "passed"
+  },
+  "scope": "Two functional regression checks, one per different initial state. Not matched speed-comparison trials. Final browser state independently verified; no booking made."
+}

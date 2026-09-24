@@ -15,7 +15,10 @@ export interface TabManagerDeps {
 export class TabManager {
   private tabs = new Map<number, TabInfo>();
   private childSessions = new Map<string, number>(); // sessionId -> parentTabId
+  private targetInfos = new Map<number, TargetInfo>();
   private nextSessionId = 1;
+  private epoch = 0;
+  private attaching = new Map<number, Promise<TargetInfo>>();
   private logger: Logger;
   private sendMessage: SendMessageFn;
 
@@ -95,17 +98,41 @@ export class TabManager {
   /**
    * Attach debugger to a tab and register it.
    */
-  async attach(tabId: number): Promise<TargetInfo> {
-    const debuggee = { tabId };
+  async attach(tabId: number, allowed: () => boolean = () => true, openerId?: string): Promise<TargetInfo> {
+    const pending = this.attaching.get(tabId);
+    if (pending) return pending;
+    if (this.tabs.get(tabId)?.state === "connected") {
+      const info = await chrome.debugger.sendCommand({ tabId }, "Target.getTargetInfo") as { targetInfo: TargetInfo };
+      return info.targetInfo;
+    }
+    const epoch = this.epoch;
+    const valid = () => epoch === this.epoch && this.attaching.get(tabId) === job && allowed();
+    const job = Promise.resolve().then(() => this.attachOnce(tabId, valid, openerId));
+    this.attaching.set(tabId, job);
+    try { return await job; }
+    finally { if (this.attaching.get(tabId) === job) this.attaching.delete(tabId); }
+  }
 
+  private async attachOnce(tabId: number, allowed: () => boolean, openerId?: string): Promise<TargetInfo> {
+    const debuggee = { tabId };
+    if (!allowed()) throw new Error("Tab attachment cancelled");
     this.logger.debug("Attaching debugger to tab:", tabId);
     await chrome.debugger.attach(debuggee, "1.3");
+    let result: { targetInfo: TargetInfo };
+    try {
+      if (!allowed()) throw new Error("Tab attachment cancelled");
+      result = await chrome.debugger.sendCommand(debuggee, "Target.getTargetInfo") as { targetInfo: TargetInfo };
+      if (!allowed()) throw new Error("Tab attachment cancelled");
+    } catch (error) {
+      await chrome.debugger.detach(debuggee).catch(() => {});
+      throw error;
+    }
 
-    const result = (await chrome.debugger.sendCommand(debuggee, "Target.getTargetInfo")) as {
-      targetInfo: TargetInfo;
-    };
-
-    const targetInfo = result.targetInfo;
+    // A popup may be registered before its first navigation. A blank URL keeps
+    // Puppeteer waiting for target initialization, so Page.enable never runs.
+    const targetInfo = { ...result.targetInfo, url: result.targetInfo.url || "about:blank",
+      ...(openerId ? { openerId } : {}) };
+    this.targetInfos.set(tabId, targetInfo);
     const sessionId = `pw-tab-${this.nextSessionId++}`;
 
     this.tabs.set(tabId, {
@@ -131,10 +158,19 @@ export class TabManager {
     return targetInfo;
   }
 
+  update(tabId: number, change: { url?: string; title?: string }): void {
+    const info = this.targetInfos.get(tabId);
+    if (!info || (!change.url && change.title === undefined)) return;
+    const targetInfo = { ...info, ...(change.url ? { url: change.url } : {}), ...(change.title !== undefined ? { title: change.title } : {}) };
+    this.targetInfos.set(tabId, targetInfo);
+    this.sendMessage({ method: "forwardCDPEvent", params: { method: "Target.targetInfoChanged", params: { targetInfo } } });
+  }
+
   /**
    * Detach a tab and clean up.
    */
   detach(tabId: number, shouldDetachDebugger: boolean): void {
+    this.attaching.delete(tabId);
     const tab = this.tabs.get(tabId);
     if (!tab) return;
 
@@ -149,6 +185,7 @@ export class TabManager {
     });
 
     this.tabs.delete(tabId);
+    this.targetInfos.delete(tabId);
 
     // Clean up child sessions
     for (const [childSessionId, parentTabId] of this.childSessions) {
@@ -168,6 +205,7 @@ export class TabManager {
    * Handle debugger detach event from Chrome.
    */
   handleDebuggerDetach(tabId: number): void {
+    this.attaching.delete(tabId);
     if (!this.tabs.has(tabId)) return;
 
     const tab = this.tabs.get(tabId);
@@ -189,13 +227,17 @@ export class TabManager {
     }
 
     this.tabs.delete(tabId);
+    this.targetInfos.delete(tabId);
   }
 
   /**
    * Clear all tabs and child sessions.
    */
   clear(): void {
+    this.epoch++;
+    this.attaching.clear();
     this.tabs.clear();
+    this.targetInfos.clear();
     this.childSessions.clear();
   }
 

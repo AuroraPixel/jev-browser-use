@@ -1,16 +1,16 @@
 import { createHash } from "node:crypto";
-import type { CDPSession, ElementHandle, JSHandle, Page } from "puppeteer-core";
-import { INPAGE_SCRIPT } from "../page/snapshot/inpage.ts";
-import { resolveRef } from "../page/snapshot/index.ts";
+import type { CDPSession, ElementHandle, Frame, JSHandle, Page } from "puppeteer-core";
+import { resolveRefFrame } from "../page/snapshot/index.ts";
 import { withFront } from "../page/extend.ts";
+import { observeFrames } from "./frames.ts";
+import { pointerPoint, PointerNotReady } from "../page/pointer.ts";
 import { currentRun } from "../daemon/run-context.ts";
 import type { Decision, Observation } from "./types.ts";
 
 interface DocumentContext { evaluate(expression: string): Promise<unknown>; evaluateHandle(expression: string): Promise<JSHandle> }
 interface Realm extends DocumentContext { readonly context?: DocumentContext }
-function realm(page: Page): Realm { return (page.mainFrame() as unknown as { isolatedRealm(): Realm }).isolatedRealm(); }
-/** Use the existing session: the extension cannot attach a second CDP client,
- * and a popup may not be exposed as a Puppeteer Page by the bundled extension. */
+function realm(page: Page | Frame): Realm { return (("mainFrame" in page ? page.mainFrame() : page) as unknown as { isolatedRealm(): Realm }).isolatedRealm(); }
+/** Observe window creation without attaching an extra CDP client. */
 export function watchWindowOpen(page: Page, opened: (url: string) => void): () => void {
   const client = (page as Page & { _client?: () => CDPSession })._client?.();
   const listener = (event: { url: string }) => opened(event.url);
@@ -31,21 +31,13 @@ export function fingerprint(observation: Observation): string {
     feedback: observation.feedback?.map(f => f.text),
   })).digest("hex");
 }
-export async function observe(page: Page, signal: AbortSignal): Promise<Observation> {
+export async function observe(page: Page, signal: AbortSignal, checkpoint = false): Promise<Observation> {
   checkActive(signal);
-  const world = realm(page);
-  if (!world.context) await world.evaluate("0");
-  const document = world.context;
-  if (!document) throw new StaleObservation();
-  let result: Observation;
-  try { result = await document.evaluate(`${INPAGE_SCRIPT}; window.__jevBrowserUse.jevSnapshot()`) as Observation; }
+  try { return await observeFrames(page, () => checkActive(signal), checkpoint); }
   catch (e) {
-    if (/context.*destroyed|cannot find context|navigat|detached/i.test(String(e))) throw new StaleObservation();
+    if (/context.*destroyed|cannot find context|navigat|detached|document changed/i.test(String(e))) throw new StaleObservation();
     throw e;
   }
-  if (world.context !== document) throw new StaleObservation();
-  checkActive(signal);
-  return result;
 }
 
 /** Preflight only: callers may retry this phase, never a dispatched mutation. */
@@ -65,9 +57,12 @@ export async function prepare(page: Page, observed: Observation, decision: Decis
   if (observed.guards && decision.target && (decision.operation === "CLICK" || decision.operation === "SELECT" || (choosingText && decision.operation === "TYPE_TEXT"))) {
     const ref = decision.target.split(":")[0]!;
     if (!observed.elements.some(e => e.ref === ref && e.operations.includes(decision.operation as "CLICK" | "SELECT" | "TYPE_TEXT"))) throw new Error("Jev target is not an observed compatible element");
-    const world = realm(page), context = world.context;
+    let frame: Frame;
+    try { frame = resolveRefFrame(page, ref); } catch { throw new StaleObservation("Frame navigated or detached"); }
+    const world = realm(frame), context = world.context;
     if (!context) throw new StaleObservation();
-    const args = [ref, observed.guards.page, observed.guards.targets[ref], decision.operation === "CLICK"].map(v => JSON.stringify(v)).join(",");
+    const frameKey = /^f\d+/.exec(ref)?.[0];
+    const args = [ref, frameKey ? observed.guards.frames?.[frameKey] : observed.guards.page, observed.guards.targets[ref], decision.operation === "CLICK"].map(v => JSON.stringify(v)).join(",");
     const result = await context.evaluateHandle(`window.__jevBrowserUse?.jevTarget(${args})`).catch(() => null);
     const element = result?.asElement() as ElementHandle<Element> | null;
     if (!element || context !== world.context) { await result?.dispose().catch(() => {}); throw new StaleObservation("target identity, context, visibility or form guard changed"); }
@@ -84,8 +79,13 @@ export async function prepare(page: Page, observed: Observation, decision: Decis
   const ref = decision.target.split(":")[0]!;
   const element = observed.elements.find((e) => e.ref === ref && e.operations.includes(decision.operation as "CLICK" | "TYPE_TEXT" | "SELECT"));
   if (!element) throw new Error("Jev target is not an observed compatible element");
-  let handle: ElementHandle<Element>;
-  try { handle = await resolveRef(page, ref); } catch { throw new StaleObservation(); }
+  // Keep resumed text in the same isolated realm as direct/prepared actions.
+  // Main-world handles cannot access the private picker transaction state.
+  const context = realm(resolveRefFrame(page, ref)).context;
+  if (!context) throw new StaleObservation();
+  const raw = await context.evaluateHandle(`window.__jevBrowserUse?.ref(${JSON.stringify(ref)})`).catch(() => null);
+  const handle = raw?.asElement() as ElementHandle<Element> | null;
+  if (!handle) { await raw?.dispose().catch(() => {}); throw new StaleObservation(); }
   const valid = await handle.evaluate((e) => {
     const r = e.getBoundingClientRect();
     const x = Math.max(0, r.left) + (Math.min(innerWidth, r.right) - Math.max(0, r.left)) / 2;
@@ -102,30 +102,24 @@ export async function prepare(page: Page, observed: Observation, decision: Decis
 }
 
 /** Dispatch once. Any failure is uncertain and must be inspected by the host. */
-export async function execute(page: Page, observed: Observation, decision: Decision, handle: ElementHandle<Element> | null, text: string | undefined, signal: AbortSignal): Promise<void> {
+export async function execute(page: Page, observed: Observation, decision: Decision, handle: ElementHandle<Element> | null, text: string | undefined, signal: AbortSignal, onDispatch: () => void = () => {}): Promise<void> {
   checkActive(signal);
   await withFront(page, async () => {
     checkActive(signal);
+    if (decision.operation !== "CLICK") onDispatch();
     if (decision.operation === "CLICK") {
-      // Jev only selects controls inside the viewport. ElementHandle.click()
-      // waits on IntersectionObserver before scrolling, which can stall while
-      // the desktop is locked. Recheck the actual hit point and send native
-      // mouse input without depending on a renderer visibility callback.
-      const point = await handle!.evaluate(e => {
-        const r = e.getBoundingClientRect();
-        const left = Math.max(0, r.left), right = Math.min(innerWidth, r.right);
-        const top = Math.max(0, r.top), bottom = Math.min(innerHeight, r.bottom);
-        const x = (left + right) / 2, y = (top + bottom) / 2;
-        let hit = e.ownerDocument.elementFromPoint(x, y);
-        while (hit?.shadowRoot) { const next = hit.shadowRoot.elementFromPoint(x, y); if (!next || next === hit) break; hit = next; }
-        if (!e.isConnected || e.matches(":disabled") || e.closest('[inert],[aria-disabled="true"]') ||
-            !e.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) ||
-            right <= left || bottom <= top || !hit || (e !== hit && !e.contains(hit)) || !(window as any).__jevBrowserUse?.jevHit(e, true)) {
-          throw new Error("Click target changed or became covered");
-        }
-        return { x, y };
-      });
+      let point: { x: number; y: number };
+      try {
+        const safe = await handle!.evaluate(e => (window as any).__jevBrowserUse?.jevHit(e, true)).catch(() => false);
+        if (!safe) throw new PointerNotReady("Target changed or became covered before click");
+        point = await pointerPoint(handle!);
+      } catch (error) {
+        if (error instanceof PointerNotReady) throw new StaleObservation(error.message);
+        throw new StaleObservation("Target/frame geometry became unavailable before click");
+      }
       checkActive(signal);
+      await handle!.evaluate(e => (window as any).__jevBrowserUse?.jevBeforeChoice(e));
+      onDispatch();
       await page.mouse.click(point.x, point.y);
     }
     else if (decision.operation === "SELECT") {
@@ -143,6 +137,16 @@ export async function execute(page: Page, observed: Observation, decision: Decis
       }, option);
     } else if (decision.operation === "TYPE_TEXT") {
       if (text === undefined) throw new Error("Host text is required");
+      if (observed.elements.find(e => e.ref === decision.target)?.picker) {
+        // Some legacy pickers bind their keyboard handlers lazily on mouseover.
+        // Native movement also reaches delegated listeners. Recheck the captured
+        // node afterward; a hover replacement/overlay must never receive text.
+        const point = await pointerPoint(handle!);
+        await page.mouse.move(point.x, point.y);
+        checkActive(signal);
+        const clear = await handle!.evaluate(e => (window as any).__jevBrowserUse?.jevHit(e)).catch(() => false);
+        if (!clear) throw new Error("Picker changed or became covered during activation");
+      }
       const richText = await handle!.evaluate(e => (e as HTMLElement).isContentEditable);
       if (richText) {
         // Chrome Input.insertText cooperates with editors' beforeinput handling.
@@ -180,13 +184,19 @@ export async function execute(page: Page, observed: Observation, decision: Decis
       await handle!.evaluate((node, value) => {
         const e = node as HTMLInputElement;
         if (!e.isConnected || e.matches(":disabled") || e.readOnly || e.getAttribute("aria-readonly") === "true") throw new Error("Field changed");
+        let legacyPicker = false;
         {
           if (e.tagName !== "INPUT" && e.tagName !== "TEXTAREA") throw new Error("Unsupported field");
           if (["password", "file", "checkbox", "radio", "hidden", "button", "reset", "submit", "image"].includes(e.type)) throw new Error("Unsupported field type");
           // Autocomplete widgets render their suggestions only while focused.
           // Focus the captured field before the DOM editing transaction; never
           // type into whichever element a handler may redirect focus to.
+          legacyPicker = !!(window as any).__jevBrowserUse?.jevBeginEdit(e, value);
           e.focus();
+          // Older paired-value pickers listen to keyboard events rather than
+          // input. Keep every event bound to the captured node; never synthesize
+          // Enter or type into a field that redirected focus.
+          if (legacyPicker) e.dispatchEvent(new KeyboardEvent('keydown', {key:'Unidentified',bubbles:true,composed:true}));
           let active = e.ownerDocument.activeElement;
           while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
           if (!e.isConnected || active !== e) throw new Error("Field redirected focus or was replaced");
@@ -195,6 +205,10 @@ export async function execute(page: Page, observed: Observation, decision: Decis
           if (e.value !== value) throw new Error("Field rejected its value");
         }
         e.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertText", data: value }));
+        let active = e.ownerDocument.activeElement;
+        while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+        if (legacyPicker && e.isConnected && active === e)
+          e.dispatchEvent(new KeyboardEvent('keyup', {key:'Unidentified',bubbles:true,composed:true}));
         e.dispatchEvent(new Event("change", { bubbles: true }));
         if (!e.isConnected) throw new Error("Field replaced during input");
       }, text);
@@ -208,7 +222,7 @@ export async function settle(page: Page, observed: Observation, decision: Decisi
   checkActive(signal);
   if (decision.operation === "WAIT") return;
   const field = observed.elements.find(e => e.ref === decision.target);
-  const autocomplete = decision.operation === "TYPE_TEXT" && field?.role === "combobox";
+  const autocomplete = decision.operation === "TYPE_TEXT" && (field?.role === "combobox" || !!field?.picker);
   try {
     await page.evaluate((autocomplete) => new Promise<void>(resolve => {
       let stopped = false, frames = 0, lastOptions = "", lastChange = performance.now();
@@ -222,7 +236,10 @@ export async function settle(page: Page, observed: Observation, decision: Decisi
       const picker = controls?.split(/\s+/).map(id => document.getElementById(id)).find(Boolean);
       const ready = () => {
         if (stopped) return;
-        const options = [...(picker || document).querySelectorAll('[role="option"],[role="listbox"] a,[role="listbox"] [role="button"]')].filter(e => {
+        const options = [...(picker || document).querySelectorAll('[role="option"],[role="listbox"] a,[role="listbox"] [role="button"],li,div')].filter(e => {
+          if (e.matches('li,div') && !e.matches('[role="option"]') &&
+            (getComputedStyle(e).cursor !== 'pointer' || !active || !(active as HTMLInputElement).value ||
+              !(e.textContent || '').trim().startsWith((active as HTMLInputElement).value))) return false;
           const r = e.getBoundingClientRect();
           return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});
         });

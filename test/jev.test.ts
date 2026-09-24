@@ -155,14 +155,15 @@ function formDecision(p: Observation): Decision {
   return field.value ? decision("CLICK", p.elements.find(e => e.label === "Save")!.ref) : decision("TYPE_TEXT", field.ref);
 }
 
-test("observes visible accessible fields/options, filters disabled/password/file and flags frames", async () => withPage(async p => {
+test("observes visible accessible fields/options and frames, filters disabled/password/file", async () => withPage(async p => {
   await p.setContent(`<label>Name <input></label><input aria-label=Password type=password value=secret><input type=file><button disabled>Disabled</button><button style="display:none">Hidden</button><select aria-label=Plan><option value=a>A</option><option disabled>B</option><option value=c>C</option></select><iframe srcdoc="<button>Inside</button>"></iframe>`);
   const o = await observe(p, new AbortController().signal);
   expect(o.elements.map(e => e.label)).toContain("Name");
-  expect(o.elements.some(e => /Password|Disabled|Hidden|Inside|Choose File/.test(e.label))).toBe(false);
+  expect(o.elements.some(e => /Password|Disabled|Hidden|Choose File/.test(e.label))).toBe(false);
+  expect(o.elements.find(e => e.label === 'Inside')?.ref).toMatch(/^f\d+e\d+$/);
   expect(JSON.stringify(o)).not.toContain("secret");
   expect(o.elements.find(e => e.label === "Plan")!.options!.map(e => e.index)).toEqual(["0", "2"]);
-  expect(o.unsupportedFrames).toBe(true);
+  expect(o.unsupportedFrames).toBe(false);
 }));
 
 test("host text handoff -> fill -> click -> unverified DONE; replay does not submit twice", async () => withPage(async p => {

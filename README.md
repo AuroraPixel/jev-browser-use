@@ -4,6 +4,8 @@
 
 [简体中文](README.zh-CN.md) · [Architecture](docs/architecture.md) · [Jev API & handoffs](docs/jev.md) · [CLI reference](docs/help.md)
 
+![jev-browser-use architecture: native reasoning, guarded browser actions](docs/benchmarks/2026-09-23/architecture-poster.png)
+
 `jev-browser-use` connects the agent you already use to a persistent Chrome browser. Give Jev a bounded goal and it
 can observe, choose targets, click, type supplied text, select, scroll and wait inside one local loop. Codex or Claude
 steps back in when the task needs reading, judgment, new text or an unsupported control.
@@ -19,6 +21,7 @@ with Jev integration informed by [jev-ultrafast](https://github.com/browser-use/
 
 - A compiled CLI and one warm daemon; named tabs, cookies and page state persist between calls.
 - A Jev action loop with scoped freshness checks, bounded waits and explicit host handoffs.
+- [Conditional browser plans](docs/plans.md): exact actions run locally, Jev resolves semantic targets, and verified bindings can be reused with freshness checks.
 - Known-text `inputs` and host-authored `until` checkpoints to reduce host turns and extra decisions.
 - A single-submission `completion` boundary and idempotent continuation receipts.
 - A Chrome extension for your existing profile, plus isolated Chrome and direct CDP connection modes.
@@ -230,6 +233,56 @@ Speed depends on network, rendering, task shape and the host's handoffs. A warm 
 known inputs, checkpoints and bounded readiness waits remove avoidable host/model trips. `requests`, `trace` and
 `timing` measure the actual run. Do not treat model latency as the whole task's duration. The benchmark scripts provide
 repeatable local scenarios; their simulated mode is not an API speed measurement.
+
+## Real browser comparison
+
+**Latest reliability fix:** [Real 12306 autocomplete regression](docs/benchmarks/2026-09-24-autocomplete/report.md).
+The installed extension changed the actual station codes, queried once and returned the correct route in a
+4.442 s active run: six Jev API requests, no host handoff. Setup is separate; the full command took 10.963 s.
+461 core tests passed. This is a correctness check, not a Codex speed comparison.
+
+On Selenium's official test pages and The Internet, **all 60 measured trials passed**: four workflows × five rounds
+× three actual interfaces. Jev's prepared execution was **1.74× as fast as desktop Codex Computer Use** by the geometric
+mean of four workload median ratios, but **0.81× as fast as Codex's built-in Browser Use** (about 23% longer duration).
+This is not evidence that Jev is universally faster than Codex. No promotional post was published from this run.
+
+![Measured comparison: desktop Computer Use, built-in Browser Use and Jev](docs/benchmarks/2026-09-23/comparison.png)
+
+| Median execution, seconds ↓ | Desktop Computer Use | Built-in Browser Use | Jev |
+| --- | ---: | ---: | ---: |
+| Selenium web form | 3.892 | 1.296 | 2.111 |
+| Selenium dynamic input | 1.734 | 1.165 | 1.516 |
+| The Internet dropdown + checkboxes | 3.982 | 0.887 | 0.958 |
+| The Internet dynamic controls | 13.321 | 12.610 | 12.714 |
+
+Prepared programs; independent AX/DOM verification included. Host reasoning, authoring, outer tool dispatch and initial
+navigation excluded; intermediate navigation included. Default viewports/profiles differ. The long dynamic task
+contains about 12 seconds of site-imposed waiting. The [full report](docs/benchmarks/2026-09-23/report.md) includes
+navigation/workflow medians, all measurements, environment, failures from authoring pilots and reproducible harnesses.
+The header artwork is generated; the result chart is plotted directly from measured data.
+
+### Follow-up: separate the executor from the host workflow
+
+The [24 September split validation](docs/benchmarks/2026-09-24/report.md) keeps the earlier result intact:
+
+**Selenium form highlight: jev-browser-use's local-plan execution measured 1.94× the speed of Codex's built-in
+Browser Use — nearly 2× on this prepared task.** Execution medians were **1.159 s → 0.596 s**, with five verified
+runs per arm. Both arms received known controls; timing includes verification and excludes initial navigation,
+host reasoning, program authoring and outer tool dispatch. The local plan made **zero Jev model calls**; no model
+response time was subtracted. This is a single-workload result; the suite-wide figures follow below.
+
+- **Prepared executor:** 40 / 40 verified, five repetitions per task and arm. Exact local Jev plans made **zero
+  model calls**. The geometric mean built-in/Jev median ratio was **1.34× for execution**, but **1.02× including
+  initial navigation**, close to parity. This measures the framework's local route, not Jev inference.
+- **Full host workflow:** six verified attempts, one per task and arm. Built-in / Jev wall times were **70.0 / 45.8 s**
+  for count-and-wait, **183.4 / 107.8 s** for table reasoning, and **63.4 / 73.2 s** for nested frames. Jev made
+  19 API attempts and returned an actual unsupported-frame handoff. Browser tool calls fell from 17 to 9 overall.
+
+![Separate executor and host-workflow measurements](docs/benchmarks/2026-09-24/comparison.png)
+
+The host study shares one context and has substantial timing outside the tools; it is exploratory, not a blind
+agent benchmark. Errors and recovery are included. These different timing boundaries cannot be pooled, and neither
+supports a universal speed claim. [Protocol, samples, traces and limitations](docs/benchmarks/2026-09-24/report.md).
 
 ## Development
 

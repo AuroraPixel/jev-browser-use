@@ -1,0 +1,854 @@
+{
+  "kind": "exploratory-paired-single-host-study",
+  "attemptsPerTaskPerArm": 1,
+  "independentContexts": false,
+  "toolTimingNote": "CUA tool-reported wall time versus shell command-reported duration; scopes differ. The outside-tool remainder includes planning, code authoring, tool dispatch and scheduling, not isolated model inference.",
+  "rows": [
+    {
+      "name": "b1-native",
+      "startedAt": "2026-09-24T03:16:02.105926+00:00",
+      "startMonotonicNs": 316123094842250,
+      "endedAt": "2026-09-24T03:17:12.142149+00:00",
+      "endMonotonicNs": 316193130977708,
+      "hostWallMs": 70036.135458,
+      "verified": true,
+      "browserToolCalls": 7,
+      "handoffs": 0,
+      "errors": [
+        "Initial visible wait returned a selector deadline; next DOM observation confirmed Hello World without repeating Start."
+      ],
+      "actual": {
+        "deleteCount": 1,
+        "message": "Hello World!"
+      },
+      "reportedBrowserToolSeconds": [
+        1.6605,
+        0.4289,
+        0.9058,
+        1.5031,
+        0.4448,
+        3.4083,
+        0.0344
+      ],
+      "reportedBrowserToolTotalMs": 8385.8,
+      "outsideReportedBrowserToolsMs": 61650.335458,
+      "automaticModelHandoffs": 0,
+      "plannedReasoningHandoffs": 0
+    },
+    {
+      "name": "b1-jev",
+      "startedAt": "2026-09-24T03:17:22.929761+00:00",
+      "startMonotonicNs": 316203918924916,
+      "endedAt": "2026-09-24T03:18:08.774878+00:00",
+      "endMonotonicNs": 316249763900375,
+      "hostWallMs": 45844.975459,
+      "verified": true,
+      "browserToolCalls": 2,
+      "handoffs": 0,
+      "errors": [],
+      "actual": {
+        "deleteCount": 1,
+        "message": "Hello World!",
+        "decisions": 13,
+        "actionSteps": 10
+      },
+      "reportedBrowserToolSeconds": [
+        6.247685375,
+        7.979711625
+      ],
+      "reportedBrowserToolTotalMs": 14227.396999999999,
+      "outsideReportedBrowserToolsMs": 31617.578459000004,
+      "automaticModelHandoffs": 0,
+      "plannedReasoningHandoffs": 0,
+      "jevStages": [
+        {
+          "status": "done",
+          "stopReason": "done",
+          "steps": 6,
+          "decisions": 7,
+          "timing": {
+            "decisionMs": 3276,
+            "observeMs": 180,
+            "preflightMs": 48,
+            "actionMs": 276,
+            "settleMs": 151,
+            "hostWaitMs": 0,
+            "wallMs": 4399
+          },
+          "startedAt": "2026-09-24T03:17:35.514Z",
+          "returnedAt": "2026-09-24T03:17:39.913Z",
+          "apiAttempts": 7,
+          "trace": [
+            {
+              "index": 1,
+              "decisionIndex": 1,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 1409,
+              "requestBytes": 20670,
+              "candidateCount": 37
+            },
+            {
+              "index": 2,
+              "decisionIndex": 2,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 326,
+              "requestBytes": 7622,
+              "candidateCount": 2
+            },
+            {
+              "index": 3,
+              "decisionIndex": 3,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 277,
+              "requestBytes": 7958,
+              "candidateCount": 3
+            },
+            {
+              "index": 4,
+              "decisionIndex": 4,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 292,
+              "requestBytes": 8316,
+              "candidateCount": 4
+            },
+            {
+              "index": 5,
+              "decisionIndex": 5,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 349,
+              "requestBytes": 8698,
+              "candidateCount": 5
+            },
+            {
+              "index": 6,
+              "decisionIndex": 6,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 300,
+              "requestBytes": 8469,
+              "candidateCount": 4
+            },
+            {
+              "index": 7,
+              "decisionIndex": 7,
+              "source": "jev",
+              "operation": "DONE",
+              "outcome": "done",
+              "latencyMs": 319,
+              "requestBytes": 8264,
+              "candidateCount": 3
+            }
+          ],
+          "requests": [
+            {
+              "index": 1,
+              "decision": 1,
+              "attempt": 1,
+              "latencyMs": 1409,
+              "requestBytes": 20670,
+              "candidateCount": 37,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 2,
+              "decision": 2,
+              "attempt": 1,
+              "latencyMs": 326,
+              "requestBytes": 7622,
+              "candidateCount": 2,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 3,
+              "decision": 3,
+              "attempt": 1,
+              "latencyMs": 277,
+              "requestBytes": 7958,
+              "candidateCount": 3,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 4,
+              "decision": 4,
+              "attempt": 1,
+              "latencyMs": 292,
+              "requestBytes": 8316,
+              "candidateCount": 4,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 5,
+              "decision": 5,
+              "attempt": 1,
+              "latencyMs": 349,
+              "requestBytes": 8698,
+              "candidateCount": 5,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 6,
+              "decision": 6,
+              "attempt": 1,
+              "latencyMs": 300,
+              "requestBytes": 8469,
+              "candidateCount": 4,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 7,
+              "decision": 7,
+              "attempt": 1,
+              "latencyMs": 319,
+              "requestBytes": 8264,
+              "candidateCount": 3,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            }
+          ]
+        },
+        {
+          "status": "done",
+          "stopReason": "checkpoint_reached",
+          "steps": 4,
+          "decisions": 6,
+          "timing": {
+            "decisionMs": 1925,
+            "observeMs": 443,
+            "preflightMs": 14,
+            "actionMs": 258,
+            "settleMs": 4279,
+            "hostWaitMs": 0,
+            "wallMs": 7622
+          },
+          "startedAt": "2026-09-24T03:17:53.895Z",
+          "returnedAt": "2026-09-24T03:18:01.518Z",
+          "apiAttempts": 6,
+          "trace": [
+            {
+              "index": 1,
+              "decisionIndex": 1,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 340,
+              "requestBytes": 21303,
+              "candidateCount": 37
+            },
+            {
+              "index": 2,
+              "decisionIndex": 2,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "stale",
+              "latencyMs": 364,
+              "requestBytes": 10274,
+              "candidateCount": 3,
+              "staleReason": "Page changed before execution (target identity, context, visibility or form guard changed); observe and choose again"
+            },
+            {
+              "index": 3,
+              "decisionIndex": 3,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 287,
+              "requestBytes": 10274,
+              "candidateCount": 3
+            },
+            {
+              "index": 4,
+              "decisionIndex": 4,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "stale",
+              "latencyMs": 264,
+              "requestBytes": 8386,
+              "candidateCount": 2,
+              "staleReason": "Page changed before execution (target identity, context, visibility or form guard changed); observe and choose again"
+            },
+            {
+              "index": 5,
+              "decisionIndex": 5,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 371,
+              "requestBytes": 8386,
+              "candidateCount": 2
+            },
+            {
+              "index": 6,
+              "decisionIndex": 6,
+              "source": "jev",
+              "operation": "WAIT",
+              "outcome": "executed",
+              "latencyMs": 298,
+              "requestBytes": 8261,
+              "candidateCount": 1
+            }
+          ],
+          "requests": [
+            {
+              "index": 1,
+              "decision": 1,
+              "attempt": 1,
+              "latencyMs": 340,
+              "requestBytes": 21303,
+              "candidateCount": 37,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 2,
+              "decision": 2,
+              "attempt": 1,
+              "latencyMs": 364,
+              "requestBytes": 10274,
+              "candidateCount": 3,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 3,
+              "decision": 3,
+              "attempt": 1,
+              "latencyMs": 287,
+              "requestBytes": 10274,
+              "candidateCount": 3,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 4,
+              "decision": 4,
+              "attempt": 1,
+              "latencyMs": 264,
+              "requestBytes": 8386,
+              "candidateCount": 2,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 5,
+              "decision": 5,
+              "attempt": 1,
+              "latencyMs": 371,
+              "requestBytes": 8386,
+              "candidateCount": 2,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 6,
+              "decision": 6,
+              "attempt": 1,
+              "latencyMs": 298,
+              "requestBytes": 8261,
+              "candidateCount": 1,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            }
+          ]
+        }
+      ],
+      "apiAttempts": 13
+    },
+    {
+      "name": "b2-jev",
+      "startedAt": "2026-09-24T03:18:18.848675+00:00",
+      "startMonotonicNs": 316259838013833,
+      "endedAt": "2026-09-24T03:20:06.610701+00:00",
+      "endMonotonicNs": 316367600109625,
+      "hostWallMs": 107762.095792,
+      "verified": true,
+      "browserToolCalls": 4,
+      "documentationToolCalls": 1,
+      "handoffs": 1,
+      "handoffKinds": [
+        "planned host table reasoning"
+      ],
+      "errors": [
+        "Host-authored plan omitted required until.url.origin; schema rejected before execution; corrected once."
+      ],
+      "actual": {
+        "chosen": [
+          "Doe",
+          "Jason",
+          "jdoe@hotmail.com",
+          "$100.00"
+        ],
+        "select": "2",
+        "checkboxesVerifiedBeforeSubmit": true,
+        "submittedOnce": true
+      },
+      "reportedBrowserToolSeconds": [
+        2.322364125,
+        1.262690125,
+        1.2334e-05,
+        0.982103417
+      ],
+      "reportedBrowserToolTotalMs": 4567.170001,
+      "outsideReportedBrowserToolsMs": 103194.92579099999,
+      "automaticModelHandoffs": 0,
+      "plannedReasoningHandoffs": 1,
+      "jevStages": [
+        {
+          "status": "done",
+          "stopReason": "checkpoint_reached",
+          "steps": 2,
+          "decisions": 2,
+          "timing": {
+            "decisionMs": 748,
+            "observeMs": 96,
+            "preflightMs": 19,
+            "actionMs": 39,
+            "settleMs": 446,
+            "hostWaitMs": 0,
+            "wallMs": 1656
+          },
+          "startedAt": "2026-09-24T03:18:31.554Z",
+          "returnedAt": "2026-09-24T03:18:33.210Z",
+          "apiAttempts": 2,
+          "trace": [
+            {
+              "index": 1,
+              "decisionIndex": 1,
+              "source": "jev",
+              "operation": "SCROLL_DOWN",
+              "outcome": "executed",
+              "latencyMs": 352,
+              "requestBytes": 21327,
+              "candidateCount": 37
+            },
+            {
+              "index": 2,
+              "decisionIndex": 2,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 396,
+              "requestBytes": 23451,
+              "candidateCount": 43
+            }
+          ],
+          "requests": [
+            {
+              "index": 1,
+              "decision": 1,
+              "attempt": 1,
+              "latencyMs": 352,
+              "requestBytes": 21327,
+              "candidateCount": 37,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 2,
+              "decision": 2,
+              "attempt": 1,
+              "latencyMs": 396,
+              "requestBytes": 23451,
+              "candidateCount": 43,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            }
+          ]
+        },
+        {
+          "status": "done",
+          "stopReason": "plan_complete",
+          "steps": 6,
+          "decisions": 0,
+          "timing": {
+            "decisionMs": 0,
+            "observeMs": 650,
+            "preflightMs": 8,
+            "actionMs": 121,
+            "settleMs": 227,
+            "hostWaitMs": 0,
+            "wallMs": 1068
+          },
+          "plan": {
+            "completed": [
+              "name",
+              "email",
+              "option",
+              "default",
+              "clear",
+              "submit"
+            ],
+            "transitions": 6,
+            "localActions": 6,
+            "bindingHits": 0,
+            "bindingInvalidations": 0,
+            "modelCalls": 0,
+            "confidenceHandoffs": 0,
+            "waitingForEvidence": false
+          },
+          "startedAt": "2026-09-24T03:19:56.670Z",
+          "returnedAt": "2026-09-24T03:19:57.740Z",
+          "apiAttempts": 0,
+          "trace": [
+            {
+              "index": 1,
+              "source": "local",
+              "operation": "TYPE_TEXT",
+              "outcome": "executed",
+              "latencyMs": 0
+            },
+            {
+              "index": 2,
+              "source": "local",
+              "operation": "TYPE_TEXT",
+              "outcome": "executed",
+              "latencyMs": 0
+            },
+            {
+              "index": 3,
+              "source": "local",
+              "operation": "SELECT",
+              "outcome": "executed",
+              "latencyMs": 0
+            },
+            {
+              "index": 4,
+              "source": "local",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 0
+            },
+            {
+              "index": 5,
+              "source": "local",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 0
+            },
+            {
+              "index": 6,
+              "source": "local",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 0
+            }
+          ],
+          "requests": []
+        }
+      ],
+      "apiAttempts": 2
+    },
+    {
+      "name": "b2-native",
+      "startedAt": "2026-09-24T03:20:18.799036+00:00",
+      "startMonotonicNs": 316379788814041,
+      "endedAt": "2026-09-24T03:23:22.176005+00:00",
+      "endMonotonicNs": 316563151040375,
+      "hostWallMs": 183362.226334,
+      "verified": true,
+      "browserToolCalls": 4,
+      "handoffs": 0,
+      "errors": [],
+      "actual": {
+        "chosen": [
+          "Doe",
+          "Jason",
+          "jdoe@hotmail.com",
+          "$100.00"
+        ],
+        "select": "2",
+        "checkboxesVerifiedBeforeSubmit": true,
+        "submittedOnce": true
+      },
+      "reportedBrowserToolSeconds": [
+        1.7532,
+        0.7363,
+        1.8621,
+        1.0961
+      ],
+      "reportedBrowserToolTotalMs": 5447.7,
+      "outsideReportedBrowserToolsMs": 177914.526334,
+      "automaticModelHandoffs": 0,
+      "plannedReasoningHandoffs": 0
+    },
+    {
+      "name": "b3-native",
+      "startedAt": "2026-09-24T03:23:40.167259+00:00",
+      "startMonotonicNs": 316581142130916,
+      "endedAt": "2026-09-24T03:24:43.525183+00:00",
+      "endMonotonicNs": 316644499506541,
+      "hostWallMs": 63357.375625,
+      "verified": true,
+      "browserToolCalls": 6,
+      "handoffs": 0,
+      "errors": [],
+      "observationFallbacks": [
+        "domSnapshot returned empty for legacy frames; read frame DOM structure and used supported frameLocator"
+      ],
+      "actual": {
+        "frames": [
+          "LEFT",
+          "MIDDLE",
+          "RIGHT",
+          "BOTTOM"
+        ],
+        "textarea": "LEFT | MIDDLE | RIGHT | BOTTOM",
+        "select": "3",
+        "submittedOnce": true
+      },
+      "reportedBrowserToolSeconds": [
+        2.3691,
+        0.4544,
+        0.1402,
+        0.3367,
+        0.4074,
+        0.3967
+      ],
+      "reportedBrowserToolTotalMs": 4104.5,
+      "outsideReportedBrowserToolsMs": 59252.875625,
+      "automaticModelHandoffs": 0,
+      "plannedReasoningHandoffs": 0
+    },
+    {
+      "name": "b3-jev",
+      "startedAt": "2026-09-24T03:25:00.740032+00:00",
+      "startMonotonicNs": 316661714798291,
+      "endedAt": "2026-09-24T03:26:13.921114+00:00",
+      "endMonotonicNs": 316734895832250,
+      "hostWallMs": 73181.033959,
+      "verified": true,
+      "browserToolCalls": 3,
+      "handoffs": 1,
+      "handoffKinds": [
+        "model unsupported_control at nested_frames"
+      ],
+      "errors": [],
+      "actual": {
+        "frames": [
+          "LEFT",
+          "MIDDLE",
+          "RIGHT",
+          "BOTTOM"
+        ],
+        "textarea": "LEFT | MIDDLE | RIGHT | BOTTOM",
+        "select": "3",
+        "submittedOnce": true
+      },
+      "reportedBrowserToolSeconds": [
+        8.027375083,
+        0.338095625,
+        0.387789041
+      ],
+      "reportedBrowserToolTotalMs": 8753.259749,
+      "outsideReportedBrowserToolsMs": 64427.77420999999,
+      "automaticModelHandoffs": 1,
+      "plannedReasoningHandoffs": 0,
+      "jevStages": [
+        {
+          "status": "needs_host",
+          "stopReason": "host_required",
+          "steps": 2,
+          "decisions": 4,
+          "timing": {
+            "decisionMs": 2256,
+            "observeMs": 402,
+            "preflightMs": 29,
+            "actionMs": 110,
+            "settleMs": 2650,
+            "hostWaitMs": 0,
+            "wallMs": 6117
+          },
+          "startedAt": "2026-09-24T03:25:16.876Z",
+          "returnedAt": "2026-09-24T03:25:22.993Z",
+          "handoffReason": "unsupported_control",
+          "apiAttempts": 4,
+          "trace": [
+            {
+              "index": 1,
+              "decisionIndex": 1,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 1358,
+              "requestBytes": 20817,
+              "candidateCount": 37
+            },
+            {
+              "index": 2,
+              "decisionIndex": 2,
+              "source": "jev",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 269,
+              "requestBytes": 8165,
+              "candidateCount": 3
+            },
+            {
+              "index": 3,
+              "decisionIndex": 3,
+              "source": "jev",
+              "operation": "HANDOFF",
+              "outcome": "stale",
+              "latencyMs": 297,
+              "requestBytes": 4103,
+              "candidateCount": 0,
+              "staleReason": "Awaiting a recent navigation/action update before accepting inability to proceed"
+            },
+            {
+              "index": 4,
+              "decisionIndex": 4,
+              "source": "jev",
+              "operation": "HANDOFF",
+              "outcome": "handoff",
+              "latencyMs": 332,
+              "requestBytes": 4103,
+              "candidateCount": 0
+            }
+          ],
+          "requests": [
+            {
+              "index": 1,
+              "decision": 1,
+              "attempt": 1,
+              "latencyMs": 1358,
+              "requestBytes": 20817,
+              "candidateCount": 37,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 2,
+              "decision": 2,
+              "attempt": 1,
+              "latencyMs": 269,
+              "requestBytes": 8165,
+              "candidateCount": 3,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 3,
+              "decision": 3,
+              "attempt": 1,
+              "latencyMs": 297,
+              "requestBytes": 4103,
+              "candidateCount": 0,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            },
+            {
+              "index": 4,
+              "decision": 4,
+              "attempt": 1,
+              "latencyMs": 332,
+              "requestBytes": 4103,
+              "candidateCount": 0,
+              "outcome": "success",
+              "retrying": false,
+              "httpStatus": 200
+            }
+          ]
+        },
+        {
+          "status": "done",
+          "stopReason": "plan_complete",
+          "steps": 4,
+          "decisions": 0,
+          "timing": {
+            "decisionMs": 0,
+            "observeMs": 69,
+            "preflightMs": 7,
+            "actionMs": 37,
+            "settleMs": 329,
+            "hostWaitMs": 0,
+            "wallMs": 482
+          },
+          "plan": {
+            "completed": [
+              "name",
+              "text",
+              "choice",
+              "submit"
+            ],
+            "transitions": 4,
+            "localActions": 4,
+            "bindingHits": 0,
+            "bindingInvalidations": 0,
+            "modelCalls": 0,
+            "confidenceHandoffs": 0,
+            "waitingForEvidence": false
+          },
+          "startedAt": "2026-09-24T03:26:04.387Z",
+          "returnedAt": "2026-09-24T03:26:04.869Z",
+          "apiAttempts": 0,
+          "trace": [
+            {
+              "index": 1,
+              "source": "local",
+              "operation": "TYPE_TEXT",
+              "outcome": "executed",
+              "latencyMs": 0
+            },
+            {
+              "index": 2,
+              "source": "local",
+              "operation": "TYPE_TEXT",
+              "outcome": "executed",
+              "latencyMs": 0
+            },
+            {
+              "index": 3,
+              "source": "local",
+              "operation": "SELECT",
+              "outcome": "executed",
+              "latencyMs": 0
+            },
+            {
+              "index": 4,
+              "source": "local",
+              "operation": "CLICK",
+              "outcome": "executed",
+              "latencyMs": 0
+            }
+          ],
+          "requests": []
+        }
+      ],
+      "apiAttempts": 4
+    }
+  ]
+}

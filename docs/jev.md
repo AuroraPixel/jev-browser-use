@@ -4,6 +4,10 @@ jev-browser-use pairs a continuous Jev executor with a persistent Puppeteer brow
 text generation and outcome verification. Jev selects supported actions and can explicitly hand control back to the
 host. No separate text-model API, MCP sampling or recursive agent invocation is required.
 
+For multi-step work, prefer a [conditional browser plan](plans.md): the native host supplies observable stage goals,
+grounded actions run locally, and Jev resolves semantic choices. Goal stages preserve the dynamic loop for unfamiliar
+controls. Binding reuse, confidence routing and outcome guards reduce calls without bypassing action validation.
+
 ## Build and configure
 
 Follow the [README installation guide](../README.md#install). Use the compiled `dist/jev-browser-use` on PATH.
@@ -38,6 +42,11 @@ and sessions required by Puppeteer. The extension creates tabs in its **jev-brow
 profile, so those tabs use that profile's cookies and logins. Only tabs managed by the extension are exposed; your
 unrelated tabs are not automatically attached. Browser-wide settings, extra browser contexts, closing Chrome, and
 additional page CDP sessions are unsupported. Ordinary page scripts, snapshots, screenshots and Jev work on the managed tabs.
+
+Children opened by a managed tab are automatically attached, including popups whose initial URL is empty. Their opener
+relationship and later URL/title changes are retained. `new_window` remains a handoff: use `openedPages[].targetId`
+with `browser.getPage(targetId)` to inspect the child. If attachment is still pending, refresh `browser.listPages()`;
+do not click the opener again. Closing/disconnecting while attachment is pending cannot resurrect a tab session.
 
 Use the identical `connect` URL for normal scripts, Jev runs and resumes. One CDP client can connect at a time: CLI and
 MCP share it through the same daemon and `JEV_BROWSER_USE_HOME`. Disconnecting the CDP client preserves the tabs; turning
@@ -107,7 +116,8 @@ control before inserting anything; unmatched fields use the ordinary `needs_text
 before dispatch (or when the field already has that value), and never reused after uncertain execution. Filled fields
 are excluded from further text choices while their identity and value remain unchanged. A later cleared field requires
 fresh host text. Up to 20 bindings and 20,000 total text characters are supported, on `run` only.
-The configured completion button cannot be dispatched while provided inputs for the current URL remain unfilled.
+The configured completion button cannot be dispatched while provided inputs remain unfilled. For iframe inputs,
+the binding URL must match the owning frame's URL, not its embedding page.
 
 Claude/Codex still writes text that requires reading new page content. For example, delegate searching and opening a
 post to Jev, read the selected post in the host, then start a bounded reply run with the host-written reply in `inputs`
@@ -149,6 +159,58 @@ The Skill tells the current agent how to produce text, consume continuation toke
 Do not run a second Jev session or a Puppeteer mutation on the same tab during an active burst.
 
 ## Contract and limits
+
+For a final submission, specify both the state required before sending and the evidence expected afterward:
+
+```javascript
+await p.jev({action: "run", goal: "Submit exactly two items once", completion: {
+  submitLabel: "Submit",
+  before: {fields: [{label: "Quantity", value: "2"}]},
+  after: {text: ["Receipt created"]}
+}});
+```
+
+Use observed labels and actual success messages. `before` is checked again after model selection, before dispatch.
+Submission contracts freshly read rendered DOM, including fields/receipts scrolled outside the viewport; hidden,
+inert and aria-hidden content is excluded. These read-only observations never add offscreen action targets to Jev.
+Field conditions can use `contextIncludes` to distinguish equal labels in different rows. `after` must be unmet before
+submission; existing success evidence stops the action for inspection. Use exactly one of `after` or `successText`.
+The latter requires a new/changed visible live-region message. An unconfirmed submit remains observe-only on resume.
+`taskState` includes the last pre-submit checks, pending input labels, submission phase and full-session action counts,
+including actions older than the ten-entry recent history. Counts never replace current-state checks. Natural-language
+goals alone do not supply a machine-verifiable acceptance contract; use checkpoints or conditional plan stages.
+
+Autocomplete selection is separate from typing. Standard ARIA pickers and legacy text fields paired with a nearby,
+matching hidden identity field expose `taskState.pendingSelections`. The executor activates hover-initialized widgets and triggers legacy keyboard listeners,
+keeps the candidate choice inside Jev's loop, and blocks unrelated edits/submission while selection is pending. Backing
+values stay private to local guards. Unrecognized custom widgets still need host inspection; this is not universal
+support for every autocomplete implementation.
+
+For table results, use `until:{rows:[{text:["南京","拉萨"]}]}` with the intended date/field conditions. Every fragment
+within a group must occur in the same rendered data row; a query heading or fragments split across rows cannot pass.
+Rows use the checkpoint's whitespace/case rules and bounded observation. Independently inspect the resulting record.
+Even without a checkpoint, Jev's `DONE` hands off when confidence is below 0.5 by default, the observation is incomplete,
+or a recognized picker remains pending. `done` still carries `verified:false` and requires host verification.
+
+Jev can observe and operate visible same-origin and cross-origin iframe controls with frame-prefixed refs. References
+are scoped to each frame document and expire on navigation. Native clicks check ancestor-frame occlusion. Observation
+is bounded to 16 nested levels, 24 total frames, 150 controls and 6,000 characters; partial/unavailable observations
+cannot satisfy checkpoints. Plans must allow visible frame origins. Internal iframe scrolling, rotated frames,
+canvas-only controls and unavailable frames may still require host interaction.
+
+For dynamic charts, inspect the visible axis labels and mark/tooltip selectors, then use the general helper:
+
+```javascript
+const reading = await p.interact({operation: "hover", selector: "svg rect.data", index: 0, count: 6,
+  read: {selector: ".tooltip", includes: "00:00"}});
+console.log(reading.text);
+```
+
+The helper keeps rendering active, re-resolves replaced nodes, checks a stable native pointer location and waits for
+two matching visible tooltip readings. Pair every reading with its expected label before building CSV. This handles
+DOM/SVG tooltips; it does not infer pixels or extract hidden chart state. `operation:"click"` uses the same preflight but
+never retries after dispatch. Ordinary `page.click()` retains Puppeteer semantics; use `interact` where relocation is
+needed. Normal input actions and waits now also lease rendering and restore the caller's focus-emulation preference.
 
 | Result | Host action |
 | --- | --- |

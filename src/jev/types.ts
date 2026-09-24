@@ -1,3 +1,4 @@
+import { parseBrowserPlan, parseRouting, type BrowserPlan, type PlanProgress, type RoutingPolicy } from "./plan-types.ts";
 /** Jev never supplies selectors or executable code: targets are observed refs. */
 export type Operation = "CLICK" | "TYPE_TEXT" | "SELECT" | "SCROLL_UP" | "SCROLL_DOWN" | "WAIT" | "DONE" | "BLOCKED" | "HANDOFF";
 export type HandoffReason = "reasoning" | "unsupported_control" | "missing_information" | "no_progress";
@@ -11,10 +12,15 @@ export interface Candidate {
   checked?: boolean | "mixed";
   expanded?: boolean;
   selected?: boolean;
+  selectedIndex?: number;
   focused?: boolean;
+  picker?: boolean;
+  selectionPending?: boolean;
   className?: string;
   context: string;
   href?: string;
+  /** Owning frame, when different from the main document. */
+  frame?: { ref: string; url: string };
 }
 export interface Observation {
   documentId: string;
@@ -31,7 +37,12 @@ export interface Observation {
   /** Visible live-region feedback, separate from article/ordinary page text. */
   feedback?: Array<{ key: string; text: string }>;
   /** Local freshness checks only; never included in the model request or host response. */
-  guards?: { page: string; targets: Record<string, string> };
+  guards?: { page: string; targets: Record<string, string>; frames?: Record<string, string> };
+  frames?: Array<{ ref: string; url: string; depth: number }>;
+  /** Edited display/backing-value widgets awaiting a committed selection. No hidden values. */
+  pendingSelections?: Array<{ ref: string; label: string; value: string; options: string[] }>;
+  /** Rendered data rows, kept separate from headings and query summaries. */
+  rows?: string[];
 }
 export interface Decision {
   operation: Operation;
@@ -56,18 +67,22 @@ export interface HistoryEntry {
 }
 export interface DecisionTrace {
   index: number;
+  /** Actual model call ordinal; absent for locally resolved actions. */
+  decisionIndex?: number;
   operation: Operation;
   target?: string;
   model: string;
   latencyMs: number;
   requestBytes?: number;
   candidateCount?: number;
+  source?: "jev" | "local" | "binding";
+  stage?: string;
   confidence?: number;
   targetConfidence?: number;
   probabilities?: Record<string, number>;
   targetProbabilities?: Record<string, number>;
   textSource?: "provided" | "host";
-  outcome: "selected" | "stale" | "executed" | "uncertain" | "needs_text" | "handoff" | "done" | "blocked";
+  outcome: "selected" | "stale" | "executed" | "uncertain" | "needs_text" | "handoff" | "done" | "blocked" | "verified";
   staleReason?: string;
 }
 /** Each actual HTTP attempt, including bounded read-only inference retries. */
@@ -95,7 +110,11 @@ export interface SubmissionCompletion {
   /** Exact accessible name of the final submit button (not a reply opener). */
   submitLabel: string;
   /** Expected text in a newly appearing/changed visible alert/status region. */
-  successText: string;
+  successText?: string;
+  /** All conditions must hold on a fresh observation before sending submit. */
+  before?: PageCheckpoint;
+  /** Post-submit evidence; must be absent before dispatch. Alternative to successText. */
+  after?: PageCheckpoint;
 }
 export interface ProvidedInput {
   /** Exact page URL and unique accessible field name; no selectors or patterns. */
@@ -107,9 +126,11 @@ export interface ProvidedInput {
 export interface PageCheckpoint {
   url?: { origin: string; pathname?: string; pathnameIncludes?: string };
   text?: string[];
+  /** Each group must match within one rendered data row. */
+  rows?: Array<{ text: string[] }>;
   /** Visible prose is case-insensitive by default; form values always match exactly. */
   matchCase?: boolean;
-  fields?: Array<{ label: string; role?: string; value?: string; checked?: boolean; selected?: boolean }>;
+  fields?: Array<{ label: string; role?: string; contextIncludes?: string; value?: string; checked?: boolean; selected?: boolean }>;
 }
 export interface CheckpointCheck {
   condition: string;
@@ -117,7 +138,7 @@ export interface CheckpointCheck {
   actual?: string | boolean;
 }
 export type JevInput =
-  | { action: "run"; goal: string; maxSteps?: number; stepLimit?: number; completion?: SubmissionCompletion; inputs?: ProvidedInput[]; until?: PageCheckpoint; diagnostics?: "summary" | "full" }
+  | { action: "run"; goal: string; maxSteps?: number; stepLimit?: number; completion?: SubmissionCompletion; inputs?: ProvidedInput[]; until?: PageCheckpoint; plan?: BrowserPlan; routing?: RoutingPolicy; diagnostics?: "summary" | "full" }
   | { action: "resume"; sessionId: string; requestId: string; text?: string; maxSteps?: number }
   | { action: "status"; sessionId: string; diagnostics?: "summary" | "full" }
   | { action: "stop"; sessionId: string };
@@ -136,11 +157,20 @@ export interface JevResult {
   verified: false;
   requestId?: string;
   field?: Candidate;
-  page?: Pick<Observation, "url" | "title" | "text" | "truncated" | "unsupportedFrames">;
+  page?: Pick<Observation, "url" | "title" | "text" | "truncated" | "unsupportedFrames" | "frames">;
+  taskState?: {
+    phase: "acting" | "awaiting_submission" | "submitted" | "evidence_matched";
+    pendingInputs: string[];
+    pendingSelections?: Observation['pendingSelections'];
+    before?: { matched: boolean; checks: CheckpointCheck[] };
+    /** Full-session counts, not proof that the intended state was reached. */
+    actions: Array<{ operation: Operation; label?: string; executed: number; uncertain: number }>;
+  };
   reason?: string;
   handoffReason?: HandoffReason;
   completionEvidence?: { kind: "feedback" | "checkpoint"; text: string; url?: string; checks?: CheckpointCheck[] };
   checkpoint?: { matched: boolean; checks: CheckpointCheck[] };
+  plan?: PlanProgress;
   handoff?: {
     source: "model" | "runtime" | "text";
     next: "supply_text" | "inspect_page" | "verify_submission" | "inspect_new_window" | "resume";
@@ -149,7 +179,9 @@ export interface JevResult {
   };
   /** URLs announced by this page opening a window; not proof of loaded results. */
   openedWindows?: string[];
-  stopReason?: "text_required" | "host_required" | "new_window" | "burst_limit" | "step_limit" | "decision_limit" | "stale_page" | "submission_confirmed" | "submission_unconfirmed" | "checkpoint_reached" | "done" | "blocked" | "cancelled" | "error";
+  /** Actual managed child targets, safe to pass to browser.getPage(targetId). */
+  openedPages?: Array<{ targetId: string; url: string }>;
+  stopReason?: "text_required" | "host_required" | "new_window" | "burst_limit" | "step_limit" | "decision_limit" | "stale_page" | "submission_confirmed" | "submission_unconfirmed" | "checkpoint_reached" | "plan_complete" | "low_confidence" | "done" | "blocked" | "cancelled" | "error";
   steps: number;
   decisions: number;
   elapsedMs: number;
@@ -177,7 +209,7 @@ export function parseJevInput(value: unknown): JevInput {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("Jev requires an object");
   const v = value as Record<string, unknown>;
   if (typeof v.action !== "string" || !ACTIONS.has(v.action)) throw new TypeError("action must be run, resume, status or stop");
-  const allowed = v.action === "run" ? ["action", "goal", "maxSteps", "stepLimit", "completion", "inputs", "until", "diagnostics"] : v.action === "resume" ? ["action", "sessionId", "requestId", "text", "maxSteps"] : v.action === "status" ? ["action", "sessionId", "diagnostics"] : ["action", "sessionId"];
+  const allowed = v.action === "run" ? ["action", "goal", "maxSteps", "stepLimit", "completion", "inputs", "until", "plan", "routing", "diagnostics"] : v.action === "resume" ? ["action", "sessionId", "requestId", "text", "maxSteps"] : v.action === "status" ? ["action", "sessionId", "diagnostics"] : ["action", "sessionId"];
   if (Object.keys(v).some((k) => !allowed.includes(k))) throw new TypeError("Unknown Jev option; see jev-browser-use help jev");
   if (v.diagnostics !== undefined && v.diagnostics !== "summary" && v.diagnostics !== "full") throw new TypeError("diagnostics must be summary or full");
   const diagnostics = v.diagnostics as "summary" | "full" | undefined;
@@ -202,12 +234,20 @@ export function parseJevInput(value: unknown): JevInput {
     let completion: SubmissionCompletion | undefined;
     if (v.completion !== undefined) {
       const c = v.completion as Record<string, unknown>;
-      if (!c || typeof c !== "object" || Array.isArray(c) || Object.keys(c).some(k => !["submitLabel", "successText"].includes(k))) throw new TypeError("completion requires submitLabel and successText");
-      completion = { submitLabel: string(c.submitLabel, "completion.submitLabel", 200), successText: string(c.successText, "completion.successText", 500) };
+      if (!c || typeof c !== "object" || Array.isArray(c) || Object.keys(c).some(k => !["submitLabel", "successText", "before", "after"].includes(k))) throw new TypeError("completion requires submitLabel and successText or after");
+      if ((c.successText === undefined) === (c.after === undefined)) throw new TypeError("completion requires exactly one of successText or after");
+      completion = { submitLabel: string(c.submitLabel, "completion.submitLabel", 200),
+        ...(c.successText !== undefined ? { successText: string(c.successText, "completion.successText", 500) } : {}),
+        ...(c.before !== undefined ? { before: parseCheckpoint(c.before) } : {}),
+        ...(c.after !== undefined ? { after: parseCheckpoint(c.after) } : {}),
+      };
     }
     const until = v.until === undefined ? undefined : parseCheckpoint(v.until);
+    const plan = v.plan === undefined ? undefined : parseBrowserPlan(v.plan);
+    const routing = v.routing === undefined ? undefined : parseRouting(v.routing);
+    if (plan && (until || completion || inputs?.length)) throw new TypeError("A plan owns its stage text and checkpoints; do not combine it with until, inputs or completion");
     if (completion && until) throw new TypeError("Use either until for a page checkpoint or completion for a single submission, not both");
-    return { action: "run", goal: string(v.goal, "goal", 4000), maxSteps: budget(v.maxSteps, "maxSteps", 30), stepLimit: budget(v.stepLimit, "stepLimit", 100), ...(completion ? { completion } : {}), ...(inputs ? { inputs } : {}), ...(until ? { until } : {}), ...(diagnostics ? { diagnostics } : {}) };
+    return { action: "run", goal: string(v.goal, "goal", 4000), maxSteps: budget(v.maxSteps, "maxSteps", 30), stepLimit: budget(v.stepLimit, "stepLimit", 100), ...(completion ? { completion } : {}), ...(inputs ? { inputs } : {}), ...(until ? { until } : {}), ...(plan ? { plan } : {}), ...(routing ? { routing } : {}), ...(diagnostics ? { diagnostics } : {}) };
   }
   const sessionId = string(v.sessionId, "sessionId", 100);
   if (v.action !== "resume") return v.action === "status" ? { action: "status", sessionId, ...(diagnostics ? { diagnostics } : {}) } : { action: "stop", sessionId };
@@ -219,8 +259,8 @@ function record(value: unknown, name: string, keys: string[]): Record<string, un
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some(k => !keys.includes(k))) throw new TypeError(`Invalid ${name} fields`);
   return value as Record<string, unknown>;
 }
-function parseCheckpoint(value: unknown): PageCheckpoint {
-  const c = record(value, "until", ["url", "text", "fields", "matchCase"]), out: PageCheckpoint = {};
+export function parseCheckpoint(value: unknown): PageCheckpoint {
+  const c = record(value, "until", ["url", "text", "rows", "fields", "matchCase"]), out: PageCheckpoint = {};
   if (c.url !== undefined) {
     const u = record(c.url, "until.url", ["origin", "pathname", "pathnameIncludes"]);
     const origin = new URL(string(u.origin, "until.url.origin", 4000));
@@ -236,16 +276,25 @@ function parseCheckpoint(value: unknown): PageCheckpoint {
     if (!Array.isArray(c.text) || !c.text.length || c.text.length > 10) throw new TypeError("until.text requires 1..10 visible text fragments");
     out.text = c.text.map(t => string(t, "until.text", 500).replace(/\s+/g, " ").trim());
   }
+  if (c.rows !== undefined) {
+    if (!Array.isArray(c.rows) || !c.rows.length || c.rows.length > 10) throw new TypeError("until.rows requires 1..10 data-row conditions");
+    out.rows = c.rows.map(raw => {
+      const r = record(raw, "until.rows", ["text"]);
+      if (!Array.isArray(r.text) || !r.text.length || r.text.length > 10) throw new TypeError("Each row requires 1..10 text fragments");
+      return { text: r.text.map(t => string(t, "until.rows.text", 500).replace(/\s+/g, " ").trim()) };
+    });
+  }
   if (c.matchCase !== undefined) {
-    if (typeof c.matchCase !== "boolean" || !out.text) throw new TypeError("until.matchCase must be boolean and requires text conditions");
+    if (typeof c.matchCase !== "boolean" || (!out.text && !out.rows)) throw new TypeError("until.matchCase must be boolean and requires text conditions");
     out.matchCase = c.matchCase;
   }
   if (c.fields !== undefined) {
     if (!Array.isArray(c.fields) || !c.fields.length || c.fields.length > 10) throw new TypeError("until.fields requires 1..10 field states");
     out.fields = c.fields.map(raw => {
-      const f = record(raw, "until.fields", ["label", "role", "value", "checked", "selected"]);
+      const f = record(raw, "until.fields", ["label", "role", "contextIncludes", "value", "checked", "selected"]);
       const field: NonNullable<PageCheckpoint['fields']>[number] = { label: string(f.label, "until.fields.label", 200).replace(/\s+/g, " ").trim() };
       if (f.role !== undefined) field.role = string(f.role, "until.fields.role", 50);
+      if (f.contextIncludes !== undefined) field.contextIncludes = string(f.contextIncludes, "until.fields.contextIncludes", 200).replace(/\s+/g, " ").trim();
       if (f.value !== undefined) {
         if (typeof f.value !== "string" || f.value.length > 2000) throw new TypeError("until.fields.value must be a string of at most 2000 characters");
         field.value = f.value;
@@ -258,6 +307,6 @@ function parseCheckpoint(value: unknown): PageCheckpoint {
       return field;
     });
   }
-  if (!Object.keys(out).length) throw new TypeError("until requires at least one URL, text or field condition");
+  if (!Object.keys(out).length) throw new TypeError("until requires at least one URL, text, row or field condition");
   return out;
 }

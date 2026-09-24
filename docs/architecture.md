@@ -1,5 +1,11 @@
 # Architecture
 
+Conditional programs are described in [plans.md](plans.md). The host can compile a bounded task into stages with
+preconditions, observed target constraints and completion evidence. The runtime chooses local execution, verified
+same-document binding reuse or a Jev decision; unresolved reasoning/text returns to the host. Goal stages keep the
+ordinary dynamic loop for unknown controls. Stage transitions, cache invalidation and low-confidence handoffs are
+recorded separately from actual model calls. This is an executable policy and guarded binding cache, not a trained model.
+
 ## Three cooperating layers
 
 The native host agent owns task meaning. Jev selects browser actions. The local runtime owns the mechanics and stop

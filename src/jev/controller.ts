@@ -8,6 +8,8 @@ import { withJevLock } from "./lock.ts";
 import { createChooser, type Choose } from "./model.ts";
 import { evaluateCheckpoint } from "./checkpoint.ts";
 import { describeHandoff } from "./handoff.ts";
+import { BindingCache, PlanRuntime, type PlanRoute } from "./plan.ts";
+import type { RoutingPolicy } from "./plan-types.ts";
 import { parseJevInput, type Candidate, type Decision, type DecisionTrace, type HandoffReason, type HistoryEntry, type JevInput, type JevResult, type JevStatus, type JevTiming, type Observation, type ProvidedInput, type SubmissionCompletion, type PageCheckpoint } from "./types.ts";
 
 type Pending = { id: string; observation?: Observation; decision?: Decision; field?: Candidate; trace?: DecisionTrace };
@@ -37,12 +39,18 @@ interface Session {
   pending?: Pending;
   completion?: SubmissionCompletion;
   until?: PageCheckpoint;
+  plan?: PlanRuntime;
+  routing?: RoutingPolicy;
   checkpoint?: JevResult["checkpoint"];
+  before?: JevResult["checkpoint"];
+  lastAction?: { before: string; key: string };
+  repeats: number;
   inputs: ProvidedInput[];
   filled: Array<{ documentId: string; url: string; ref: string; label: string; digest: string }>;
   submission?: { previousFeedback: string[] };
   completionEvidence?: JevResult["completionEvidence"];
   openedWindows?: string[];
+  openedPages?: JevResult['openedPages'];
   recentAction?: { before: Observation; at: number };
   toggleActions: Set<string>;
   consumed: Map<string, { digest: string; result?: JevResult }>;
@@ -62,6 +70,7 @@ const fieldLabel = (label: string) => label.replace(/\s+/g, " ").trim();
 /** A page owns one bounded session. Provided values live only until used/stopped. */
 export class JevController {
   private session?: Session;
+  private bindings = new BindingCache();
   constructor(private readonly page: Page, private readonly chooseForTest?: Choose) {}
 
   async call(value: unknown): Promise<JevResult> {
@@ -71,7 +80,9 @@ export class JevController {
       const session: Session = {
         id: randomUUID(), goal: input.goal, status: "running", stepLimit: input.stepLimit ?? 60,
         completion: input.completion, until: input.until,
-        inputs: input.inputs ?? [], filled: [], toggleActions: new Set(),
+        plan: input.plan ? new PlanRuntime(input.plan, this.bindings) : undefined,
+        routing: input.routing ?? (input.plan ? { minConfidence: 0.5, minTargetConfidence: 0.5 } : undefined),
+        inputs: input.inputs ?? [], filled: [], toggleActions: new Set(), repeats: 0,
         steps: 0, decisions: 0, elapsedMs: 0, startedAt: performance.now(), startedAtIso: new Date().toISOString(), history: [], trace: [], requests: [], diagnostics: input.diagnostics ?? "summary", consumed: new Map(),
         timing: { decisionMs: 0, observeMs: 0, preflightMs: 0, actionMs: 0, settleMs: 0, hostWaitMs: 0, wallMs: 0 },
       };
@@ -89,6 +100,7 @@ export class JevController {
         s.reason = "Stopped by caller; inspect any in-flight action before continuing";
         s.pending = undefined; s.abort?.abort();
         s.inputs = [];
+        s.plan?.releaseValues();
       }
       return this.result(s);
     }
@@ -118,23 +130,40 @@ export class JevController {
     const started = performance.now();
     try { return await fn(); } finally { s.timing[phase] += performance.now() - started; }
   }
-  private read(s: Session, signal: AbortSignal): Promise<Observation> {
-    return this.timed(s, "observeMs", () => observe(this.page, signal));
+  private async read(s: Session, signal: AbortSignal): Promise<Observation> {
+    const page = await this.timed(s, "observeMs", () => observe(this.page, signal));
+    if (s.completion?.before && !s.submission) s.before = evaluateCheckpoint(s.completion.before, await this.readContract(s, signal));
+    return page;
+  }
+  /** Submission checks read freshly rendered DOM, including offscreen form
+   * fields/receipts. These read-only candidates never become action choices. */
+  private readContract(s: Session, signal: AbortSignal): Promise<Observation> {
+    return this.timed(s, "observeMs", () => observe(this.page, signal, true));
   }
   private result(s: Session, diagnostics = s.diagnostics): JevResult {
     const p = s.page, now = s.endedAt ?? performance.now();
     const timing = { ...s.timing, wallMs: now - s.startedAt,
       hostWaitMs: s.timing.hostWaitMs + (s.returnedAt !== undefined && !s.endedAt ? now - s.returnedAt : 0) };
     for (const key of Object.keys(timing) as Array<keyof JevTiming>) timing[key] = Math.round(timing[key]);
+    const actions = new Map<string, NonNullable<JevResult['taskState']>['actions'][number]>();
+    for (const entry of s.history) {
+      const key = JSON.stringify([entry.operation, entry.label]);
+      const count = actions.get(key) ?? { operation: entry.operation, label: entry.label, executed: 0, uncertain: 0 };
+      count[entry.outcome]++; actions.set(key, count);
+    }
     return structuredClone({
       sessionId: s.id, status: s.status, goal: s.goal, verified: false,
       requestId: s.pending?.id, field: s.pending?.field,
-      page: p ? { url: p.url, title: p.title, text: p.text, truncated: p.truncated, unsupportedFrames: p.unsupportedFrames } : undefined,
+      page: p ? { url: p.url, title: p.title, text: p.text, truncated: p.truncated, unsupportedFrames: p.unsupportedFrames, frames: p.frames } : undefined,
+      taskState: { phase: s.completionEvidence ? "evidence_matched" : s.submission ? "submitted" : s.completion ? "awaiting_submission" : "acting",
+        pendingInputs: s.inputs.map(i => i.label), pendingSelections: p?.pendingSelections, before: s.before, actions: [...actions.values()] },
       reason: s.reason, stopReason: s.stopReason, handoffReason: s.handoffReason,
       completionEvidence: s.completionEvidence,
       checkpoint: s.checkpoint,
+      plan: s.plan?.snapshot(),
       handoff: describeHandoff({ status: s.status, stopReason: s.stopReason, sessionId: s.id, requestId: s.pending?.id, reason: s.reason }, !!s.modelHandoff),
       openedWindows: s.openedWindows,
+      openedPages: s.openedPages,
       steps: s.steps, decisions: s.decisions, elapsedMs: Math.round(s.elapsedMs), history: s.history.slice(-10), timing,
       trace: diagnostics === "full" ? s.trace : s.trace.map(({ probabilities, targetProbabilities, ...entry }) => entry),
       requests: s.requests, startedAt: s.startedAtIso, returnedAt: new Date().toISOString(),
@@ -150,6 +179,27 @@ export class JevController {
 
   private rememberText(s: Session, page: Observation, field: Candidate, text: string): void {
     s.filled.push({ documentId: page.documentId, url: page.url, ref: field.ref, label: field.label, digest: textDigest(text) });
+  }
+
+  private planRoute(s: Session, page: Observation): PlanRoute | undefined {
+    const route = s.plan?.poll(page);
+    if (route?.kind === "done") {
+      s.status = "done"; s.stopReason = "plan_complete";
+      s.completionEvidence = { kind: "checkpoint", text: "All executed plan stages reached their host-authored completion conditions", url: page.url };
+      s.reason = "The conditional plan completed. Independently verify the full task outcome";
+    } else if (route?.kind === "handoff") this.handoff(s, "reasoning", route.reason);
+    return route;
+  }
+
+  private confidenceAllows(s: Session, decision: Decision, trace: DecisionTrace): boolean {
+    if ((!s.routing && decision.operation !== "DONE") || ["WAIT", "HANDOFF", "BLOCKED"].includes(decision.operation)) return true;
+    const min = s.routing?.minConfidence ?? 0.5, targetMin = s.routing?.minTargetConfidence ?? 0.5;
+    if (decision.confidence >= min && (!decision.target || (decision.targetConfidence ?? 0) >= targetMin)) return true;
+    trace.outcome = "handoff";
+    if (s.plan) s.plan.progress.confidenceHandoffs++;
+    this.handoff(s, "reasoning", "The proposed action did not meet the configured operation/target confidence thresholds. No action was dispatched. Inspect the candidates and repair the plan or act with the host before resuming.");
+    s.stopReason = "low_confidence";
+    return false;
   }
 
   /** The host specifies evidence; the executor can stop before another paid choice. */
@@ -174,16 +224,24 @@ export class JevController {
   /** Keep satisfied text fields out of TYPE_TEXT without hiding other actions. */
   private choices(s: Session, page: Observation): Observation {
     for (const input of [...s.inputs]) {
-      const fields = page.elements.filter(e => e.operations.includes("TYPE_TEXT") && fieldLabel(e.label) === input.label);
-      if (page.url === input.url && fields.length === 1 && fields[0]!.value === input.text) {
+      const fields = page.elements.filter(e => (e.frame?.url ?? page.url) === input.url && e.operations.includes("TYPE_TEXT") && fieldLabel(e.label) === input.label);
+      if (fields.length === 1 && fields[0]!.value === input.text) {
         this.rememberText(s, page, fields[0]!, input.text);
         s.inputs.splice(s.inputs.indexOf(input), 1);
       }
     }
     return { ...page, elements: page.elements.map(e => {
-      const filled = s.filled.some(f => f.documentId === page.documentId && f.url === page.url && f.ref === e.ref && f.digest === textDigest(e.value));
-      return filled ? { ...e, operations: e.operations.filter(op => op !== "TYPE_TEXT") } : e;
-    }).filter(e => e.operations.length) };
+      const required = s.completion?.before?.fields?.find(f => f.value !== undefined && f.label === fieldLabel(e.label) && (!f.role || f.role === e.role) &&
+        (!f.contextIncludes || fieldLabel(e.context).includes(f.contextIncludes)) && f.value === e.value &&
+        page.elements.filter(other => fieldLabel(other.label) === f.label && (!f.role || other.role === f.role) && (!f.contextIncludes || fieldLabel(other.context).includes(f.contextIncludes))).length === 1);
+      const filled = !!required || s.filled.some(f => f.documentId === page.documentId && f.url === page.url && f.ref === e.ref && f.digest === textDigest(e.value));
+      let operations = filled ? e.operations.filter(op => op !== "TYPE_TEXT") : e.operations;
+      const pending = page.pendingSelections?.[0];
+      if (pending) operations = operations.filter(op => pending.ref === e.ref
+        ? (op === 'TYPE_TEXT' || (op === 'CLICK' && !pending.options.length))
+        : op === 'CLICK' && pending.options.includes(e.ref));
+      return { ...e, operations };
+    }) };
   }
 
   /** Observe a pending UI transition locally. Never replay its initiating action. */
@@ -203,14 +261,17 @@ export class JevController {
     while (true) {
       checkActive(signal);
       try {
-        const page = await this.read(s, signal);
-        s.page = page;
-        const expected = s.completion!.successText.replace(/\s+/g, " ").trim();
-        const evidence = page.feedback?.find(f => f.text.includes(expected) &&
+        s.page = await this.read(s, signal);
+        const page = await this.readContract(s, signal);
+        const expected = s.completion!.successText?.replace(/\s+/g, " ").trim();
+        const evidence = expected && page.feedback?.find(f => f.text.includes(expected) &&
           !s.submission!.previousFeedback.includes(JSON.stringify(f)));
-        if (evidence) {
+        const after = s.completion!.after && evaluateCheckpoint(s.completion!.after, page);
+        if (after) s.checkpoint = after;
+        if ((evidence && !page.loading && !page.truncated && !page.unsupportedFrames) || after?.matched) {
           s.status = "done"; s.stopReason = "submission_confirmed";
-          s.completionEvidence = { kind: "feedback", text: evidence.text };
+          s.completionEvidence = evidence ? { kind: "feedback", text: evidence.text } :
+            { kind: "checkpoint", text: "Post-submit conditions changed from unmet to matched", url: page.url, checks: after!.checks };
           s.reason = "Submitted once and observed the configured success feedback. Independently verify the resulting record or permalink";
           return;
         }
@@ -232,8 +293,16 @@ export class JevController {
       request => s.requests.push({ ...request, index: s.requests.length + 1, decision: s.decisions }));
     let unwatch = () => {};
     let windowOpened = false;
-    const handoffWindow = () => {
-      this.handoff(s, "unsupported_control", "The page opened a new window. Inspect openedWindows and the resulting tab; this page-scoped session cannot verify its contents. Do not repeat the opening action");
+    const originalTargets = new Set(this.page.browser().targets());
+    const handoffWindow = async () => {
+      const deadline = performance.now() + 1500;
+      do {
+        s.openedPages = this.page.browser().targets().filter(t => !originalTargets.has(t) && t.type() === 'page' && t.opener() === this.page.target())
+          .map(t => ({ targetId: (t as unknown as { _targetId: string })._targetId, url: t.url() })).filter(t => !!t.targetId);
+        if (s.openedPages.length) break;
+        await delay(50, signal);
+      } while (performance.now() < deadline);
+      this.handoff(s, "unsupported_control", "The page opened a new window. Use openedPages targetId with browser.getPage(targetId), or refresh browser.listPages() if attachment is pending. Inspect the child result before continuing; do not repeat the opening action.");
       s.stopReason = "new_window";
     };
     try {
@@ -243,9 +312,8 @@ export class JevController {
           (s.openedWindows ??= []).push(url);
           s.openedWindows = s.openedWindows.slice(-5);
         });
-        let used = 0, stale = 0, loadingDone = 0, repeats = 0;
+        let used = 0, stale = 0, loadingDone = 0;
         let location: string | undefined, navigationAt = -Infinity, loadingWaitUntil = -Infinity;
-        let lastAction: { before: string; key: string } | undefined;
         if (s.submission) { await this.confirmSubmission(s, signal); return; }
         if (pending?.decision && pending.observation) {
           try {
@@ -253,15 +321,16 @@ export class JevController {
             used++;
           } catch (e) {
             if (!(e instanceof StaleObservation)) throw e;
+            s.plan?.invalidateSelection();
             if (pending.trace) { pending.trace.outcome = "stale"; pending.trace.staleReason = e.message; }
             s.page = await this.read(s, signal);
             this.pause(s, "Page changed while waiting for text; supplied text was discarded. Resume to choose from the new page", "stale_page");
             return;
           }
         }
-        while (used < maxSteps) {
+        while (used < maxSteps || s.plan?.pending) {
           checkActive(signal);
-          if (windowOpened) { handoffWindow(); return; }
+          if (windowOpened) { await handoffWindow(); return; }
           let trace: DecisionTrace | undefined;
           try {
             const observation = await this.read(s, signal);
@@ -273,6 +342,18 @@ export class JevController {
             location = nextLocation;
             s.page = observation;
             if (this.reachedCheckpoint(s, observation)) return;
+            const route = this.planRoute(s, observation);
+            if (route?.kind === "done" || route?.kind === "handoff") return;
+            if (route?.kind === "wait") {
+              await this.timed(s, "settleMs", () => delay(80, signal));
+              continue;
+            }
+            // A receipt may keep the loop alive to confirm the final action in
+            // a burst, but confirmation must not permit another mutation.
+            if (used >= maxSteps) {
+              this.pause(s, "Explicit burst limit reached; inspect progress, then resume with this requestId");
+              return;
+            }
             if (s.steps >= s.stepLimit || s.decisions >= s.stepLimit * 2) {
               s.status = "blocked"; s.stopReason = s.steps >= s.stepLimit ? "step_limit" : "decision_limit";
               s.reason = "Session step/decision limit reached; inspect the page before starting a new goal"; return;
@@ -299,29 +380,59 @@ export class JevController {
               await this.timed(s, "settleMs", () => delay(100, signal));
               continue;
             }
-            if (lastAction && fingerprint(observation) === lastAction.before) {
-              if (++repeats >= 3) { this.handoff(s, "no_progress"); return; }
-            } else repeats = 0;
-            s.decisions++;
-            const choices = this.choices(s, observation);
-            let goal = s.completion ? `${s.goal}\nExecution boundary: submit once using the button named ${JSON.stringify(s.completion.submitLabel)}. Completion requires new success feedback ${JSON.stringify(s.completion.successText)}. Do not choose DONE before submission.` : s.goal;
+            if (s.lastAction && fingerprint(observation) === s.lastAction.before) {
+              if (++s.repeats >= 3) { this.handoff(s, "no_progress"); return; }
+            } else s.repeats = 0;
+            const choices = route?.kind === "ready" ? route.page : this.choices(s, observation);
+            let goal = s.completion ? `${s.goal}\nExecution boundary: submit once using the button named ${JSON.stringify(s.completion.submitLabel)}. Completion requires ${JSON.stringify(s.completion.after ?? s.completion.successText)}. Do not choose DONE before submission.` : s.goal;
+            if (s.completion?.before) goal += `\nRequired pre-submit state: ${JSON.stringify(s.completion.before)}. Fresh checks: ${JSON.stringify(s.before)}. Fix unmet conditions before submitting; action counts are not proof of the current state.`;
+            if (s.completion && !choices.elements.some(e => e.role === 'button' && fieldLabel(e.label) === fieldLabel(s.completion!.submitLabel)) && observation.scroll.down) {
+              goal += `\nThe required submit control is not in the current viewport. SCROLL_DOWN is available to reveal more content. Do not re-edit satisfied fields or claim BLOCKED while the required control may be below.`;
+            }
+            if (s.history.length > 10) goal += `\nFull-session action counts (not outcome evidence): ${JSON.stringify(this.result(s).taskState!.actions)}`;
             if (s.until) goal += `\nHost checkpoint (all required): ${JSON.stringify(s.until)}. The runtime stops automatically when this matches. Still unmet: ${JSON.stringify(s.checkpoint?.checks.filter(c => !c.matched).map(c => c.condition))}. Continue toward these conditions; HANDOFF if interpretation is needed. Do not leave an already-open matching result to start unrelated searches.`;
             const prepared = s.inputs.filter(i => i.url === observation.url);
             if (prepared.length) goal += `\nPrepared text is available for these fields when they become actionable: ${JSON.stringify(prepared.map(i => i.label))}. Fill them with the prepared replacement, even if they currently contain an old value. Resolve any open autocomplete by choosing the suggestion matching the current focused field's value before filling the next field. A covered field is not an invitation to type into a different field.`;
             const filled = s.filled.filter(f => f.documentId === observation.documentId && f.url === observation.url && observation.elements.some(e => e.ref === f.ref && textDigest(e.value) === f.digest));
             if (filled.length) goal += `\nText has been inserted into ${JSON.stringify(filled.map(f => f.label))}. Text insertion does not confirm an autocomplete selection; choose its matching suggestion if the picker is still open. Do not retype or use unrelated site search.`;
-            const decision = await this.timed(s, "decisionMs", () => choose(choices, goal, s.history, signal));
-            trace = { index: s.decisions, operation: decision.operation, target: decision.target, model: decision.model, latencyMs: decision.latencyMs, requestBytes: decision.requestBytes, candidateCount: decision.candidateCount,
+            if (route?.kind === "ready") goal = route.goal;
+            const local = route?.kind === "ready" ? route.decision : undefined;
+            if (!local) { s.decisions++; if (s.plan) s.plan.progress.modelCalls++; }
+            const decision = local ?? await this.timed(s, "decisionMs", () => choose(choices, goal, s.history, signal));
+            trace = { index: s.trace.length + 1, decisionIndex: local ? undefined : s.decisions, source: local && route?.kind === "ready" ? route.source : "jev", stage: s.plan?.stage?.id,
+              operation: decision.operation, target: decision.target, model: decision.model, latencyMs: decision.latencyMs, requestBytes: decision.requestBytes, candidateCount: decision.candidateCount,
               confidence: decision.confidence, targetConfidence: decision.targetConfidence,
               probabilities: decision.probabilities, targetProbabilities: decision.targetProbabilities, outcome: "selected" };
             s.trace.push(trace);
             checkActive(signal);
+            if (!local && !this.confidenceAllows(s, decision, trace)) {
+              s.page = await this.read(s, signal);
+              return;
+            }
+            if (decision.operation === 'DONE' && (observation.truncated || observation.unsupportedFrames || observation.pendingSelections?.length)) {
+              trace.outcome = 'handoff';
+              this.handoff(s, 'reasoning', 'Completion is unconfirmed: the observation is incomplete or a picker selection is still pending. Inspect taskState.pendingSelections and the actual result rows.');
+              return;
+            }
+            const planned = s.plan?.accept(observation, decision);
+            if (planned?.skip) { trace.outcome = "verified"; continue; }
+            if (decision.operation === "DONE" && s.plan) {
+              trace.outcome = "handoff";
+              this.handoff(s, "reasoning", "Jev claimed completion before the active plan stage's evidence matched. Inspect the stage and its conditions.");
+              return;
+            }
             if (decision.operation === "TYPE_TEXT") {
               if (!choices.elements.some(e => e.ref === decision.target && e.operations.includes("TYPE_TEXT"))) throw new Error("Jev selected an unavailable text target");
               const field = observation.elements.find(e => e.ref === decision.target)!;
-              const input = s.inputs.find(i => i.url === observation.url && i.label === fieldLabel(field.label));
+              if (planned?.text !== undefined) {
+                trace.textSource = "provided";
+                await this.act(s, observation, decision, planned.text, signal, trace, undefined, true);
+                used++; stale = 0; loadingDone = 0;
+                continue;
+              }
+              const input = s.inputs.find(i => i.url === (field.frame?.url ?? observation.url) && i.label === fieldLabel(field.label));
               if (input) {
-                if (observation.elements.filter(e => e.operations.includes("TYPE_TEXT") && fieldLabel(e.label) === input.label).length !== 1) {
+                if (observation.elements.filter(e => (e.frame?.url ?? observation.url) === input.url && e.operations.includes("TYPE_TEXT") && fieldLabel(e.label) === input.label).length !== 1) {
                   trace.outcome = "handoff";
                   this.handoff(s, "missing_information", "Provided input matches more than one field. Inspect the target; no text was inserted");
                   return;
@@ -358,6 +469,11 @@ export class JevController {
               continue;
             }
             if (decision.operation === "DONE" || decision.operation === "BLOCKED") {
+              if (decision.operation === "DONE" && s.inputs.length) {
+                trace.outcome = "handoff";
+                this.handoff(s, "no_progress", "Prepared inputs remain unfilled; completion cannot be accepted. Inspect taskState.pendingInputs.");
+                return;
+              }
               if (decision.operation === "DONE" && s.completion) {
                 trace.outcome = "stale";
                 trace.staleReason = "Configured submission has not executed";
@@ -396,7 +512,7 @@ export class JevController {
               s.reason = "Host agent must supply the field text, then resume with this requestId"; return;
             }
             const key = `${decision.operation}:${decision.target ?? ""}`;
-            if (decision.operation === "WAIT" || lastAction?.key !== key) repeats = 0;
+            if (decision.operation === "WAIT" || s.lastAction?.key !== key) s.repeats = 0;
             const target = observation.elements.find(e => e.ref === decision.target);
             // A repeated checkbox action from the same form state is a cycle,
             // even though each individual click changed checked/unchecked.
@@ -418,14 +534,19 @@ export class JevController {
             await this.act(s, observation, decision, undefined, signal, trace);
             if (toggleKey) s.toggleActions.add(toggleKey);
             if (s.submission) { await this.confirmSubmission(s, signal); return; }
-            if (windowOpened) { handoffWindow(); return; }
+            if (windowOpened) { await handoffWindow(); return; }
             if (decision.operation === "WAIT" && s.recentAction) {
               await this.waitForChange(s, observation, s.recentAction.at + 5000, signal);
             }
-            lastAction = decision.operation === "WAIT" ? undefined : { before: fingerprint(observation), key };
+            s.lastAction = decision.operation === "WAIT" ? undefined : { before: fingerprint(observation), key };
             stale = 0; loadingDone = 0; used++;
           } catch (e) {
+            if (e instanceof SubmissionGuard) {
+              if (trace) trace.outcome = "handoff";
+              this.handoff(s, "reasoning", e.message); return;
+            }
             if (!(e instanceof StaleObservation)) throw e;
+            s.plan?.invalidateSelection();
             if (trace) { trace.outcome = "stale"; trace.staleReason = e.message; }
             if (++stale >= 3) { this.handoff(s, "no_progress", "Page kept changing or the target was covered; inspect it before resuming"); return; }
             await this.timed(s, "settleMs", () => delay(50, signal));
@@ -433,6 +554,8 @@ export class JevController {
         }
         s.page = await this.read(s, signal);
         if (this.reachedCheckpoint(s, s.page)) return;
+        const route = this.planRoute(s, s.page);
+        if (route?.kind === "done" || route?.kind === "handoff") return;
         if (s.steps >= s.stepLimit) { s.status = "blocked"; s.stopReason = "step_limit"; s.reason = "Session step limit reached; independently check the outcome"; }
         else this.pause(s, "Explicit burst limit reached; inspect progress, then resume with this requestId");
       }));
@@ -447,32 +570,50 @@ export class JevController {
       unwatch();
       s.elapsedMs += performance.now() - started;
       s.abort = undefined;
-      if (TERMINAL.has(s.status)) { s.endedAt ??= performance.now(); s.inputs = []; }
+      if (TERMINAL.has(s.status)) { s.endedAt ??= performance.now(); s.inputs = []; s.plan?.releaseValues(); }
       else s.returnedAt = performance.now();
     }
     return this.result(s);
   }
 
-  private async act(s: Session, observation: Observation, decision: Decision, text: string | undefined, signal: AbortSignal, trace?: DecisionTrace, input?: ProvidedInput): Promise<void> {
-    const handle = await this.timed(s, "preflightMs", () => prepare(this.page, observation, decision, signal, !!input));
+  private async act(s: Session, observation: Observation, decision: Decision, text: string | undefined, signal: AbortSignal, trace?: DecisionTrace, input?: ProvidedInput, planText = false): Promise<void> {
+    const pending = observation.pendingSelections?.[0];
+    if (pending && ['CLICK','TYPE_TEXT','SELECT'].includes(decision.operation) &&
+        !(decision.target === pending.ref && ['CLICK','TYPE_TEXT'].includes(decision.operation)) &&
+        !(decision.operation === 'CLICK' && pending.options.includes(decision.target!))) {
+      throw new SubmissionGuard(`Selection for ${pending.label} is still pending. Choose its matching visible option before changing another field or submitting.`);
+    }
     const field = observation.elements.find(e => e.ref === decision.target?.split(":")[0]);
+    const submitting = s.completion && decision.operation === "CLICK" && field?.role === "button" && fieldLabel(field.label) === fieldLabel(s.completion.submitLabel);
+    let submitPage = observation;
+    if (submitting) {
+      if (s.submission) throw new SubmissionGuard("This session already dispatched its submit; no repeat is allowed");
+      s.page = await this.read(s, signal);
+      submitPage = await this.readContract(s, signal);
+      if (s.completion!.before) s.before = evaluateCheckpoint(s.completion!.before, submitPage);
+      if (s.before && !s.before.matched) throw new SubmissionGuard("Submit was not dispatched: required pre-submit conditions failed. Inspect taskState.before and repair the current page before resuming.");
+      if (s.inputs.length) throw new SubmissionGuard("Submit was not dispatched: prepared inputs remain unfilled.");
+      if (s.completion!.after && evaluateCheckpoint(s.completion!.after, submitPage).matched) throw new SubmissionGuard("Post-submit evidence was already present before dispatch. Inspect the existing outcome; no submit was sent.");
+    }
+    const handle = await this.timed(s, "preflightMs", () => prepare(this.page, observation, decision, signal, !!input || planText));
     const entry: HistoryEntry = { operation: decision.operation, target: decision.target, label: field?.label, outcome: "uncertain",
       ...(decision.operation === "CLICK" && field?.checked !== undefined ? { checkedBefore: field.checked } : {}) };
-    if (s.completion && decision.operation === "CLICK" && field?.role === "button" &&
-        field.label.replace(/\s+/g, " ").trim() === s.completion.submitLabel.replace(/\s+/g, " ").trim()) {
-      if (s.submission) { await handle?.dispose(); throw new Error("This session already dispatched its submit; no repeat is allowed"); }
-      s.submission = { previousFeedback: (observation.feedback ?? []).map(f => JSON.stringify(f)) };
-    }
-    s.history.push(entry); s.steps++;
-    // Consume before dispatch. A missing acknowledgement must never reuse text.
-    if (input) s.inputs.splice(s.inputs.indexOf(input), 1);
-    if (trace) trace.outcome = "uncertain";
+    let dispatched = false;
+    const onDispatch = () => {
+      dispatched = true;
+      if (submitting) s.submission = { previousFeedback: (submitPage.feedback ?? []).map(f => JSON.stringify(f)) };
+      s.history.push(entry); s.steps++;
+      s.plan?.dispatched(observation, decision, text, trace?.source);
+      if (input) s.inputs.splice(s.inputs.indexOf(input), 1);
+      if (trace) trace.outcome = "uncertain";
+    };
     const dispatchedAt = performance.now();
     try {
-      await this.timed(s, "actionMs", () => execute(this.page, observation, decision, handle, text, signal));
+      await this.timed(s, "actionMs", () => execute(this.page, observation, decision, handle, text, signal, onDispatch));
       entry.outcome = "executed";
       if (trace) trace.outcome = "executed";
-    } catch {
+    } catch (error) {
+      if (!dispatched && error instanceof StaleObservation) throw error;
       throw new Error("Action may have executed; it will not be retried. Inspect the page before starting another goal");
     } finally { await handle?.dispose().catch(() => {}); }
     // Execution has already been recorded. A lost post-action read cannot cause a retry.
@@ -500,6 +641,8 @@ export class JevController {
     }
   }
 }
+
+class SubmissionGuard extends Error {}
 
 const controllers = new WeakMap<Page, JevController>();
 export function jev(page: Page, input: JevInput): Promise<JevResult> {
